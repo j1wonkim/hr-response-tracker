@@ -23,9 +23,9 @@ def index():
 
 
 def test_index_parses_well_formed_items_and_skips_malformed(index):
-    # 4 items in the fixture, 1 has a malformed pubDate and is skipped
-    assert index.raw_items_seen == 4
-    assert len(index.items) == 3
+    # 5 items in the fixture, 1 has a malformed pubDate and is skipped
+    assert index.raw_items_seen == 5
+    assert len(index.items) == 4
     assert len(index.skipped) == 1
     assert index.skipped[0]["title"] == "Fixture: item with malformed pubDate for skip testing"
 
@@ -76,18 +76,34 @@ def test_parse_article_page_report_type(index):
     assert event.news_type == "Report"
 
 
-def test_filter_by_news_type_keeps_only_news_release_and_statement(index):
+def test_parse_article_page_dispatch_type(index):
+    georgia = next(i for i in index.items if "Georgia" in i.title)
+    html = (FIXTURES / "article_dispatch.html").read_text(encoding="utf-8")
+    event = parse_article_page(html, georgia.url, fallback=georgia)
+
+    assert event.news_type == "Dispatches"
+    assert event.countries == ["Georgia"]
+    assert event.regions == ["Europe/Central Asia"]
+    assert "raided the homes of three independent journalists" in event.body
+
+
+def test_filter_by_news_type_keeps_news_release_statement_and_dispatches(index):
     events = []
-    for title_fragment, fixture in [("Libya", "article_libya.html"), ("Sudan", "article_statement.html"), ("Ukraine", "article_report.html")]:
+    for title_fragment, fixture in [
+        ("Libya", "article_libya.html"),
+        ("Sudan", "article_statement.html"),
+        ("Ukraine", "article_report.html"),
+        ("Georgia", "article_dispatch.html"),
+    ]:
         item = next(i for i in index.items if title_fragment in i.title)
         html = (FIXTURES / fixture).read_text(encoding="utf-8")
         events.append(parse_article_page(html, item.url, fallback=item))
 
     filtered = filter_by_news_type(events)
     types = {e.news_type for e in filtered}
-    assert types == {"News Release", "Statement"}
+    assert types == {"News Release", "Statement", "Dispatches"}
     assert "Report" not in types
-    assert set(NEWS_TYPE_INCLUDE) == {"News Release", "Statement"}
+    assert set(NEWS_TYPE_INCLUDE) == {"News Release", "Statement", "Dispatches"}
 
 
 def _make_event(published_at):

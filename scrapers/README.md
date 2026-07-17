@@ -33,16 +33,31 @@ skip-tolerant) parses the feed into bare index items; `parse_article_page()`
 own `.news-header__flag` (news type) and `.tag-block` sections ("Region /
 Country", "Topic"); `fetch_events()` is the network-touching orchestration
 that does both, tolerating a single article failing to fetch/parse. Tested
-against fixtures in `tests/fixtures/hrw/` (feed + 3 article-page snapshots
-covering News Release, Statement, and an excluded Report). Run directly
-with `python -m scrapers.hrw` to fetch, filter, write
+against fixtures in `tests/fixtures/hrw/` (feed + 4 article-page snapshots
+covering News Release, Statement, Dispatches, and an excluded Report). Run
+directly with `python -m scrapers.hrw` to fetch, filter, write
 `data/hrw_events.json`, and print/write a run report.
 
-Narrowed to news type `News Release`/`Statement` via `filter_by_news_type()`
-— see the "Add Human Rights Watch as a second event source" entry in
-`DECISIONS.md` for why those two (and not `Dispatches`/`Commentary`/
-`Letter`, considered and deferred), plus a known nuance where a US
+Narrowed to news type `News Release`/`Statement`/`Dispatches` via
+`filter_by_news_type()` — see the "Add Human Rights Watch as a second
+event source" and "Widen HRW's taxonomy filter to include Dispatches"
+entries in `DECISIONS.md` for why these three (Dispatches was initially
+deferred, then widened to on 2026-07-17 once the pipeline had enough of a
+track record to widen with confidence — a live run went from 9 to 19
+events out of 20 raw feed items once it was added). `Commentary`,
+`Interview`, and `Letter` remain deferred. Also a known nuance where a US
 policy-area label was seen tagged as if it were a country.
+
+This taxonomy filter does not exclude multimedia-format content — HRW
+doesn't tag a documentary premiere or similar piece any differently from
+a real incident report (both can be `News Release`), so items like that
+pass this filter untouched. That's `scrapers/classify.py`'s job: its
+discrete-incident check (Check 1) asks whether the item actually describes
+a specific, datable incident, which is what catches a documentary-premiere
+announcement regardless of its news-type tag. See the "Widen HRW's
+taxonomy filter to include Dispatches" entry in `DECISIONS.md` for why
+this two-layer split (taxonomy filter + LLM incident check) is deliberate,
+not a gap.
 
 Also narrowed by `filter_by_start_date()` to `config/pipeline.yaml`'s
 `ingest_start_date` (2026-01-01) — events published before it are dropped

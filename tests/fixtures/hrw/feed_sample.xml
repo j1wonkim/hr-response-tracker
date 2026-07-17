@@ -34,6 +34,15 @@
     </item>
 
     <item>
+      <title>Dispatches: Police Raid on Journalists' Homes in Georgia</title>
+      <link>https://www.hrw.org/news/2026/07/14/georgia-journalist-raids</link>
+      <description>Georgian police raided the homes of three independent journalists...</description>
+      <pubDate>Tue, 14 Jul 2026 09:30:00 -0400</pubDate>
+      <dc:creator>Human Rights Watch</dc:creator>
+      <guid isPermaLink="true">https://www.hrw.org/news/2026/07/14/georgia-journalist-raids</guid>
+    </item>
+
+    <item>
       <title>Fixture: item with malformed pubDate for skip testing</title>
       <link>https://www.hrw.org/news/2026/07/16/fixture-bad-date</link>
       <description>This item exists to test that a malformed pubDate is skipped, not fatal.</description>

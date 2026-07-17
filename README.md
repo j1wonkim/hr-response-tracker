@@ -113,8 +113,14 @@ feed, REST API, or sitemap, and a live pipeline run confirmed 0 events made
 it through in practice (see `DECISIONS.md`). `scrapers/hrw.py` fetches
 Human Rights Watch's RSS feed for an item index, then fetches each article
 page for country/topic/news-type tags, narrowing to `News
-Release`/`Statement` — a live run pulled 9 real, tagged events from 20 raw
-feed items. `scrapers/dedup.py` merges events reported more than once for
+Release`/`Statement`/`Dispatches` (widened from just the first two on
+2026-07-17 — Dispatches turned out to be the largest category; see
+`DECISIONS.md`) — a live run pulled 19 real, tagged events from 20 raw
+feed items. This taxonomy filter doesn't screen out multimedia-format
+content (HRW tags a documentary premiere the same as a real incident
+report) — that's caught downstream by the classification stage's
+discrete-incident check instead, by design; see `DECISIONS.md`.
+`scrapers/dedup.py` merges events reported more than once for
 the same real-world incident (heuristic: shared country + title similarity
 + a 3-day window — not LLM-verified, see `DECISIONS.md`). `scrapers/classify.py`
 is the LLM classification stage — one call asks both whether an item

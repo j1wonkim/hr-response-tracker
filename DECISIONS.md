@@ -779,6 +779,74 @@ YAML value instead of editing scraper code.
 
 ---
 
+## 2026-07-17 — Widen HRW's taxonomy filter to include Dispatches; clarify how multimedia content is actually excluded
+
+**Decision:** `NEWS_TYPE_INCLUDE` in `scrapers/hrw.py` widens from
+`{"News Release", "Statement"}` to `{"News Release", "Statement",
+"Dispatches"}`. This is the widening the "Add Human Rights Watch as a
+second event source" entry (above) deferred, pending seeing how
+News Release/Statement alone performed — they've now been running in
+production long enough (verified live classification, a working ministry
+adapter built against the resulting event stream) to widen with
+confidence rather than guessing upfront.
+
+**Source-switch rationale — cross-reference, not new:** why HRW is the
+event source at all (rather than Amnesty) is already fully logged in
+"Add Human Rights Watch as a second event source" and "Drop Amnesty as an
+event source," both above. This entry only concerns HRW's own internal
+scope mapping (which of HRW's news types count as in-scope events), not
+the choice of HRW as a source.
+
+**New scope mapping (current, complete):**
+- **Included** — `News Release`, `Statement`, `Dispatches`: each is a
+  dated piece tied to a specific incident.
+- **Excluded by this taxonomy filter** — `Report`, `Background Briefing`,
+  `Fact Sheet`, `UPR`, `Journal Article`, and similar: these document
+  ongoing practices or multi-year patterns, not a single dated event: see
+  the "Add Human Rights Watch as a second event source" entry.
+  `Commentary`, `Interview`, and `Letter` remain deferred, for the same
+  reason Dispatches was until now — not yet widened to, pending review.
+- **Not excluded by this taxonomy filter at all — multimedia/format-based
+  content.** HRW does not tag a documentary premiere, video, or other
+  multimedia-format piece with a distinct news type; on HRW's own site,
+  such items can carry a legitimate news type like `News Release` and
+  pass this filter untouched (the "Immersive Documentary Centers Human
+  Rights in Climate Crisis" item from the live classification run is
+  exactly this case — tagged `News Release`, not some special
+  "multimedia" type). Excluding that kind of item is
+  `scrapers/classify.py`'s job — the discrete-incident check (Check 1)
+  asks whether the item describes a specific, datable incident at all,
+  and a documentary-premiere announcement fails that check regardless of
+  its news-type tag. This is a deliberate two-layer design, not a gap:
+  the taxonomy filter narrows by HRW's own classification of *what kind
+  of piece this is*; the LLM check narrows by *does this describe an
+  incident*, which taxonomy alone can't answer for a site that doesn't
+  tag format separately from type.
+
+**Verification:** a live run on 2026-07-17 (via `python -m scrapers.hrw`)
+went from 9 of 20 raw feed items passing the filter (News Release/
+Statement only) to 19 of 20 with Dispatches added — Dispatches turned out
+to be the single largest category of discrete-incident content HRW
+publishes in this window, not a marginal addition. This is a large
+enough jump in ingestion volume that it's worth flagging explicitly for
+anyone tuning the classification/linking stages downstream, not something
+to treat as a minor tweak.
+
+**Alternatives considered:**
+- **Also widen to Commentary/Interview/Letter now.** Rejected for now —
+  no evidence yet on how these perform (the same reasoning that held back
+  Dispatches until this entry); revisit individually once there's a
+  reason to.
+- **Try to exclude multimedia content via a taxonomy-level signal** (e.g.
+  detecting embedded video/interactive markup on the article page).
+  Rejected: the existing LLM discrete-incident check already does this
+  reliably (verified against the documentary-premiere case in the live
+  classification run), and duplicating that judgment as a heuristic in
+  the taxonomy filter would be redundant, brittle, and harder to tune
+  than adjusting one prompt.
+
+---
+
 <!--
 Template for new entries:
 

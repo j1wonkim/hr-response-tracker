@@ -18,11 +18,16 @@ unlike Amnesty's feed. That taxonomy only exists on the article page itself
   3. fetch_events() -- network-touching orchestration: fetch the feed, then
      fetch+parse each item's article page, tolerating per-item failures.
 
-Ingestion is narrowed to news type "News Release" or "Statement" (see
-NEWS_TYPE_INCLUDE) -- both are dated statements responding to a specific
-incident, unlike Report/Background Briefing/UPR/Fact Sheet, which document
-ongoing practices. Same rationale as Amnesty's Action/Urgent Action filter;
-see DECISIONS.md.
+Ingestion is narrowed to news type "News Release", "Statement", or
+"Dispatches" (see NEWS_TYPE_INCLUDE) -- all three are dated pieces tied to
+a specific incident, unlike Report/Background Briefing/UPR/Fact Sheet,
+which document ongoing practices. Same rationale as Amnesty's Action/
+Urgent Action filter; see DECISIONS.md. This taxonomy filter is not the
+only scope check: it excludes by HRW's own news-type tag, but doesn't
+distinguish content format -- a documentary-premiere announcement can
+still be tagged "News Release" and pass through here. Excluding that kind
+of item is scrapers/classify.py's job (the discrete-incident check), not
+this filter's.
 """
 
 from __future__ import annotations
@@ -57,7 +62,12 @@ REGION_NAMES = {
 # Only these news types are discrete, datable events -- see DECISIONS.md.
 # Excludes Report, Background Briefing, Fact Sheet, UPR, Journal Article,
 # etc., which document ongoing practices rather than a single dated event.
-NEWS_TYPE_INCLUDE = {"News Release", "Statement"}
+# Note: this taxonomy filter does NOT screen out multimedia-format content
+# (e.g. a documentary premiere announcement) -- HRW doesn't tag those
+# distinctly, so they can pass this filter under a legitimate news type.
+# That's handled downstream by scrapers/classify.py's discrete-incident
+# check, not here -- see DECISIONS.md.
+NEWS_TYPE_INCLUDE = {"News Release", "Statement", "Dispatches"}
 
 # Elements that pollute extracted body text (share-button rows, tooltips'
 # raw markup already handled by get_text) but aren't part of the article.
