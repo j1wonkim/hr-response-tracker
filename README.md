@@ -113,12 +113,20 @@ pytest`. No ministry-side scraping, linking, issue classification,
 automation, or visualization yet. Build order and architecture are
 documented in `CLAUDE.md`.
 
-## Data & citation
+## License
 
-Code in this repository is licensed under [MIT](LICENSE). Data (everything
-under `data/` and any generated exports) is licensed separately under
-[CC BY 4.0](LICENSE-DATA) — you're free to use, share, and adapt it, even
-commercially, with attribution.
+This repository carries two licenses, covering different things:
+
+- **Code** — everything in `scrapers/`, `prompts/`, `site/`, and other
+  source/tooling in this repo — is licensed under [MIT](LICENSE).
+- **Data** — everything under `data/` and any generated exports — is
+  licensed separately under [CC BY 4.0](LICENSE-DATA). You're free to use,
+  share, and adapt it, even commercially, with attribution.
+
+The `LICENSE` and `LICENSE-DATA` files each contain the verbatim,
+unmodified license text (so GitHub and other tooling can detect them
+correctly) — this section is where the project-specific explanation,
+citation, and attribution details live instead.
 
 If you use this dataset, please cite it:
 
@@ -138,8 +146,3 @@ If you use this dataset, please cite it:
 Tagged releases will be archived on Zenodo with a per-release DOI once the
 pipeline is producing data; a release-specific citation and DOI badge will
 be added here at that point.
-
-## License
-
-- Code: [MIT](LICENSE)
-- Data: [CC BY 4.0](LICENSE-DATA)

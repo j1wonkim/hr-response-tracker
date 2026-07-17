@@ -498,6 +498,45 @@ question for a classifier, not a rule set.
 
 ---
 
+## 2026-07-17 — Restructure LICENSE files so GitHub detects them
+
+**Decision:** `LICENSE` now contains only the verbatim, unmodified MIT
+license text (copyright line: "Copyright (c) 2026 Jiwon Kim", nothing
+else). `LICENSE-DATA` now contains only the verbatim, unmodified CC BY 4.0
+legal code (fetched directly from
+`creativecommons.org/licenses/by/4.0/legalcode.txt` to guarantee exact
+text). Everything that isn't the license text itself — which license
+covers what (code vs. `data/`), the suggested citation, and the BibTeX
+block — moved into the README's License section.
+
+**Rationale:** GitHub was showing this repo's license as "Unknown."
+GitHub's license detector (`licensee`) matches file contents against known
+license templates and is strict about extraneous text — the previous
+`LICENSE` had the correct MIT body but an appended paragraph explaining
+the code/data split, and `LICENSE-DATA` had explanatory prose wrapped
+around a CC BY *summary* (not the actual legal code) plus a suggested-
+attribution block. Either of those is enough to break template matching.
+Splitting "what the license says" (verbatim, in the license files) from
+"what this project wants you to know about its licensing" (in the README)
+fixes detection while keeping the explanation — it just lives somewhere
+a license-detection tool doesn't parse.
+
+**Alternatives considered:** Keeping the explanatory text in the license
+files and hoping GitHub's detector tolerates it was rejected — it already
+didn't, that's the bug being fixed. Dropping the CC BY 4.0 data license
+notice entirely (relying on GitHub only ever detecting one repo-wide
+license, which would necessarily be the code license) was rejected: the
+project's data-vs-code licensing split is a deliberate, hard requirement
+(see the 2026-07-16 "Project scaffolding and licensing split" entry), and
+losing that distinction to satisfy a detector would be the wrong trade.
+Using CC BY 4.0's short "deed" summary text instead of the full legal code
+in `LICENSE-DATA` was considered and rejected — the deed is explicitly not
+the license itself (creativecommons.org describes it as a human-readable
+summary of the legal code), so a `LICENSE-DATA` file containing only the
+deed would not actually state the terms being agreed to.
+
+---
+
 <!--
 Template for new entries:
 
