@@ -14,11 +14,11 @@ statements to open events, and codes each country's response as
 is published as a public dataset and visualized as a per-event response
 matrix.
 
-**Status:** event ingestion (HRW, deduplicated) is working end to end;
-event-vs-state-perpetrator classification exists but is untested against
-the live Anthropic API in this environment; ministry-side scraping,
-linking, issue classification, and visualization are not built yet — see
-[Current state](#current-state) below.
+**Status:** event ingestion, deduplication, and state-perpetrator
+classification (HRW) are working end to end and verified against the live
+Anthropic API; ministry-side scraping, linking, issue classification, and
+visualization are not built yet — see [Current state](#current-state)
+below.
 
 ## Why this exists
 
@@ -102,16 +102,22 @@ describes a discrete incident and whether it was state-perpetrated, using
 `prompts/state_perpetrator_filter.txt`). It needs `ANTHROPIC_API_KEY`;
 `scrapers/pipeline.py` runs it after dedup but degrades gracefully — with a
 clear "CLASSIFICATION SKIPPED" notice, not silence — if no key is set, so
-`docker run` still works out of the box. Classification is tested only
-against a mocked client; **not yet verified against the live Anthropic
-API** (no key was available in the environment this was built in).
-`scrapers/pipeline.py` writes `data/events.json` plus a run report (events
-found, date range, per-country counts, skipped items, duplicates merged)
-via `scrapers/report.py`. All of it is tested against fixtures in
+`docker run` still works out of the box. **Verified against the live API
+on 2026-07-17** (a real live run kept 4 of 9 events, correctly excluding a
+documentary-premiere announcement and a natural-disaster item — see
+`DECISIONS.md`; that first run also caught a real bug, a too-old pinned
+`anthropic` SDK version that didn't support structured output, since
+fixed). `scrapers/pipeline.py` writes `data/events.json` plus a run report
+(events found, date range, per-country counts, skipped items, duplicates
+merged) via `scrapers/report.py`. All of it is tested against fixtures in
 `tests/fixtures/`; tests pass via `docker run --rm hr-response-tracker
 pytest`. No ministry-side scraping, linking, issue classification,
-automation, or visualization yet. Build order and architecture are
-documented in `CLAUDE.md`.
+automation, or visualization yet. Two slice-2 sources were investigated
+(US State Dept DRL, South Korea MFA) — both allow crawling, but neither
+had a clean fit yet (State Dept has no DRL-specific RSS; MOFA's RSS
+doesn't cover the specific board asked about) — no adapter code written
+pending a decision on scope. Build order and architecture are documented
+in `CLAUDE.md`.
 
 ## License
 

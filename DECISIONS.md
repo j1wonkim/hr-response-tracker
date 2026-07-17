@@ -537,6 +537,53 @@ deed would not actually state the terms being agreed to.
 
 ---
 
+## 2026-07-17 — Verify state-perpetrator classification against the live API; fix pinned SDK version
+
+**Decision:** Bump the pinned `anthropic` package from `0.69.0` to
+`0.117.0` in `requirements.txt`. With that fix, `scrapers/classify.py` was
+run against the real Anthropic API for the first time (previously it had
+only been exercised through the mocked client in `tests/test_classify.py`
+— see the "Implement state-perpetrator + discrete-incident classification"
+entry above, which flagged this as unverified).
+
+**What broke, and why:** `client.messages.create(..., output_config={...})`
+raised `TypeError: Messages.create() got an unexpected keyword argument
+'output_config'` on the first live run. `output_config`-based structured
+JSON output is a real, current Anthropic API feature, but the
+`anthropic==0.69.0` pin — chosen without checking against a specific
+verified-compatible version — predates client-side support for it in the
+Python SDK. `pip index versions anthropic` showed `0.117.0` as latest;
+upgrading to it resolved the error immediately with no other code changes
+needed.
+
+**Live verification result:** Against a real run of 9 deduplicated HRW
+events, classification kept 4 and excluded 5, with reasoning that closely
+tracked `prompts/state_perpetrator_filter.txt`'s calibration examples. Two
+results worth noting specifically: "Immersive Documentary Centers Human
+Rights in Climate Crisis" — the film-premiere announcement that originally
+motivated adding the is-this-an-incident check — was correctly excluded,
+with the model's own rationale citing "(matching Example A)" from the
+prompt. A Bangladesh landslide item was correctly split on the two checks
+(`is_incident: true`, `is_state_perpetrated: false`) despite HRW's article
+criticizing government policy alongside the disaster reporting — matching
+calibration Example C's natural-disaster-vs-state-action distinction. Two
+of the five exclusions (an EU/Tunisia advocacy-anniversary piece and a
+Peru veto-the-bill piece) are more debatable calls — both cite real past
+incidents in their body text but were excluded because the model read the
+item's primary thrust as advocacy/procedural rather than incident
+reporting — worth the maintainer's review, not treated here as either
+confirmed-correct or confirmed-wrong.
+
+**Alternatives considered:** None — this is a bugfix plus a verification
+record, not a design decision with real alternatives. Logged anyway
+because CLAUDE.md's "prompt wording changes" and "source inclusion/
+exclusion" logging mandate extends naturally to "the first time a prompt's
+real output was checked, and what it got right or wrong" — this is exactly
+the kind of empirical result future maintainers need when deciding whether
+to trust or retune the prompt.
+
+---
+
 <!--
 Template for new entries:
 
