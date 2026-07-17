@@ -10,11 +10,11 @@ Maintainer: Jiwon (political scientist). This is an open community project: the 
 
 1. **Event ingestion (Amnesty side).** Scrape Amnesty International Urgent Actions and news (/latest/news/, RSS where available) daily. Extract: date, target country, perpetrating actor, summary text, URL. Filter to state-perpetrated violations only (an LLM classification call: "Is the government the responsible actor?"). The state is treated as the duty bearer.
 2. **Response monitoring (foreign ministry side).** Config-driven list of ministry sources (YAML/JSON): US State Dept, China MFA spokesperson transcripts, Russia MID, EU EEAS, others added over time. One scraper adapter per source behind a common interface. Crawl daily; store date, source, full text, URL.
-3. **Event–statement linking.** For each new ministry statement, match against open Amnesty events using entity/keyword/date-window matching plus embedding similarity, verified by an LLM call. Response window: 90 days. For each (event, country) pair, code **response** as a four-category variable:
+3. **Event–statement linking.** For each new ministry statement, match against open Amnesty events using entity/keyword/date-window matching plus embedding similarity, verified by an LLM call. Response window: 30 days. For each (event, country) pair, code **response** as a four-category variable:
    - `shamed` — country criticized/condemned the violation or the perpetrating government
    - `endorsed` — country defended the practice with justification and support of the perpetrating government's action. Typical framings: "non-interventionism," "law and order," "countercrime efforts." Any attempt to reframe the perpetrating government's action in a positive light falls here.
    - `abstention` — country responded (noted monitoring/awareness of the situation) but deferred both positive and negative judgment
-   - `no_response` — no official communication referencing the event yet (silence is a data point; finalize after the 90-day window closes)
+   - `no_response` — no official communication referencing the event yet (silence is a data point; finalize after the 30-day window closes)
 
    **Sub-tags on `endorsed`** (binary flags, non-exclusive; a statement can carry both):
    - `dispute_facts` — the response does not positively reframe the action but disputes the facts and numbers of the allegation. This pertains to endorsement and is coded `endorsed` + `dispute_facts`.
@@ -47,7 +47,7 @@ Maintainer: Jiwon (political scientist). This is an open community project: the 
 ## Hard requirements
 
 - **License:** Code under MIT (or similar permissive). Data under **CC BY 4.0**. Include LICENSE files, a suggested-citation block, and a BibTeX entry in the README and the site footer. Repo is public. Plan for Zenodo-integrated tagged releases (DOI per release).
-- **Decision log → Methodology page:** Maintain `DECISIONS.md` at repo root. Every analytical or coding decision gets an entry: date, decision, rationale, alternatives considered. Examples: the 90-day window, response-type taxonomy, what qualifies as "state-perpetrated," matching thresholds, prompt wording changes, source inclusion/exclusion. This log feeds the public Methodology page on the site (not an academic paper) and serves as the intellectual changelog for forkers — err on the side of logging.
+- **Decision log → Methodology page:** Maintain `DECISIONS.md` at repo root. Every analytical or coding decision gets an entry: date, decision, rationale, alternatives considered. Examples: the 30-day window, response-type taxonomy, what qualifies as "state-perpetrated," matching thresholds, prompt wording changes, source inclusion/exclusion. This log feeds the public Methodology page on the site (not an academic paper) and serves as the intellectual changelog for forkers — err on the side of logging.
 - **Docker throughout:** The pipeline runs in a Docker container locally and in CI. Keep the Dockerfile simple and readable (it's also a learning artifact for the maintainer). Forkers should be able to run the full pipeline with `docker build` + `docker run` and nothing else.
 - **Fork-friendly by design:** Include `CONTRIBUTING.md` with "how to add a new ministry adapter" as the primary contribution path. New sources must be addable via config (YAML) wherever possible. README prominently invites forks.
 - **Prompts as files:** All LLM prompts (violation filter, classifier, matcher) live as text files in `prompts/`, not inline in code, so they can be tuned and versioned independently.

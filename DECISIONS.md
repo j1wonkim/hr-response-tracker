@@ -62,6 +62,8 @@ impossible.
 
 ## 2026-07-16 — 90-day response window
 
+**Superseded** by [2026-07-16 — Response window shortened to 30 days](#2026-07-16--response-window-shortened-to-30-days-supersedes-90-day-window) below, same day, before any data collection began.
+
 **Decision:** A ministry statement is eligible to be linked to an Amnesty
 event only within a 90-day window following the event's publication date.
 If no statement is linked within that window, the (event, country) pair is
@@ -80,6 +82,52 @@ for the reason above. The 90-day figure is a starting assumption, not
 validated against data yet; revisit once the hand-labeled linking set
 (~30 pairs) is available and response-latency distributions can be examined
 empirically.
+
+---
+
+## 2026-07-16 — Response window shortened to 30 days (supersedes 90-day window)
+
+**Decision:** The event–statement linking window is shortened from 90 days
+to 30 days following the event's publication date. If no ministry statement
+is linked within 30 days, the (event, country) pair is finalized as
+`no_response`. `CLAUDE.md` and all references to the window elsewhere are
+updated from 90 to 30 days.
+
+**Rationale:** Two reasons, both stemming from a reframing of what this
+project is for. First, a shorter window more easily bounds the
+event–statement match itself — at 90 days, a single ministry statement has
+much more opportunity to plausibly reference multiple older, unrelated
+Amnesty events, which makes the entity/keyword/date-window/embedding match
+noisier and harder to verify with an LLM call. Second, and more
+fundamentally: this project is a real-time advocacy tracker, not an
+archival dataset. A 30-day `no_response` is a claim someone can act on now
+("this government has said nothing for a month") — a 90-day `no_response`
+mostly just describes history after the news cycle has already moved on.
+Shortening the window makes `no_response` a more meaningful, timely signal
+for that use case.
+
+**Scope implication — annual reports are out of scope by design:** Because
+the tracker is oriented around a short, actionable response window rather
+than a comprehensive historical record, government annual human rights
+reports (e.g., end-of-year white papers, annual reviews issued by a foreign
+ministry) are deliberately excluded as a response source. An annual report
+responding to an event 6+ months after the fact falls outside any
+reasonable real-time window and would not be captured as a `shamed` /
+`endorsed` / `abstention` response — it would just show up (correctly) as
+`no_response`. This is a deliberate design boundary, not a gap: sources are
+scoped to timely, event-linkable communications, and annual/periodic
+retrospective reports are not a source type the pipeline targets.
+
+**Alternatives considered:** Keeping the 90-day window (see the superseded
+entry above) was rejected for the reasons above. A much shorter window
+(e.g., 14 days) was considered but not chosen yet — 30 days is judged a
+better fit for diplomatic response latency (which can require internal
+clearance) while still being short enough to keep `no_response` meaningful;
+revisit once real response-latency data is available from the hand-labeled
+linking set. Treating annual reports as an in-scope response source with a
+separate, longer window was also considered and rejected, since it would
+reintroduce the archival framing this change is meant to move away from and
+would require a second, parallel taxonomy/timeline for periodic sources.
 
 ---
 
