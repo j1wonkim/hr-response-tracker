@@ -584,6 +584,82 @@ to trust or retune the prompt.
 
 ---
 
+## 2026-07-17 — South Korea MFA: use Press Releases + Press Briefings via RSS, not Ministry News
+
+**Decision:** The South Korea MFA adapter will crawl board `m_5676`
+("Press Releases") and board `m_5679` ("Press Briefings") via their
+working RSS feeds (`http://www.mofa.go.kr/www/brd/rss.do?brdId=302` and
+`brdId=303` respectively), not board `m_5674` ("Ministry News").
+
+**Rationale:** `m_5674` carries the broadest and, per the maintainer's
+original read, most relevant content (including MOFA Spokesperson's
+Statements), but it has no RSS feed of its own — reaching it would mean
+HTML-scraping a listing page instead of consuming a structured feed.
+`m_5676` and `m_5679` do have working RSS feeds, confirmed live before
+this decision (see the "Investigate slice 2 sources" work on 2026-07-17).
+Preferring the structured, feed-backed boards over the single broadest
+board matches this project's existing bias toward RSS where available
+(the same reasoning that shaped the HRW adapter) and toward adapters that
+don't depend on a listing page's HTML structure staying stable.
+
+**Alternatives considered:**
+- **`m_5674` via HTML parsing.** Broadest coverage, including the
+  Spokesperson's Statements the maintainer originally had in mind, but
+  requires HTML scraping of a listing page with no feed, and no guarantee
+  the government won't restructure that page without notice.
+- **All three boards.** Maximizes coverage but adds a second parsing path
+  (HTML for `m_5674`, RSS for the other two) for uncertain additional
+  value; can be revisited later if `m_5676`/`m_5679` turn out to miss
+  content the Spokesperson's Statements would have caught.
+
+The maintainer chose RSS-only (`m_5676` + `m_5679`) on 2026-07-17.
+
+---
+
+## 2026-07-17 — Switch classification model to Haiku 4.5; document API cost for forkers
+
+**Decision:** `scrapers/classify.py`'s `MODEL` constant changes from
+`claude-opus-4-8` to `claude-haiku-4-5`. Also added an explicit "this costs
+real money" disclosure to the top-level README and CONTRIBUTING.md, next
+to the existing `ANTHROPIC_API_KEY` instructions.
+
+**Rationale:** The classification call asks two bounded yes/no questions
+per event (discrete incident? state-perpetrated?) against a single
+article's title and body — well within a smaller model's capability, and
+already verified working end to end on live HRW events (see the prior
+entry). Opus was the right choice for the first live-verification pass,
+where accuracy on edge cases (documentary premiere, natural-disaster
+item) needed close scrutiny; now that the prompt and schema are verified,
+Haiku is the appropriate default for a daily cron job across a public,
+forkable project, where every fork that turns on classification incurs
+its own Anthropic bill. Making the model choice and its cost implications
+explicit in the docs (not just in code) matters specifically because
+CLAUDE.md's fork-friendly design goal means people who didn't build this
+will be the ones deciding whether to turn classification on and pay for
+it themselves.
+
+**Alternatives considered:**
+- **Keep Opus.** Higher accuracy ceiling on ambiguous cases, but no
+  evidence yet that Haiku performs meaningfully worse on this specific,
+  narrow task, and the cost difference compounds daily for every forker
+  running this unattended.
+- **Say nothing about cost and let forkers discover it themselves.**
+  Rejected outright — silently exposing new self-hosters to an unexpected
+  bill conflicts with the project's fork-friendly, transparent-by-design
+  posture.
+
+**Live re-verification (same day):** re-ran the pipeline against the same
+9 deduplicated HRW events used for the Opus verification. Haiku 4.5 kept
+the identical 4 events (Libya ICC, Uganda military, Fort Bliss detention
+deaths, Thailand forced returns) and excluded the same 5, including both
+calibration-relevant cases: the documentary-premiere item was still
+correctly excluded as not a discrete incident, and the Bangladesh
+landslide item was still correctly split (`is_incident: true`,
+`is_state_perpetrated: false`) as a natural disaster, not a state action.
+No quality regression observed on this sample.
+
+---
+
 <!--
 Template for new entries:
 

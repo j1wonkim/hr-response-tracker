@@ -66,19 +66,23 @@ classification call: 'Is the government the responsible actor?'"), plus a
 second check a live pipeline run surfaced the need for: whether the item
 describes a discrete incident at all (a documentary-premiere announcement
 passed the News Release filter but isn't a violation report). Both
-questions are asked in one call to `claude-opus-4-8` with structured JSON
-output (`output_config.format`, so the response always parses) — the full
-instructions, inclusion/exclusion rules, and calibration examples live in
-`prompts/state_perpetrator_filter.txt`, not inline, per the "prompts as
-files" hard requirement. `classify_event()`/`classify_events()` take an
-injected `anthropic.Anthropic`-shaped client, so tests
-(`tests/test_classify.py`) run against a fake client and never touch the
-live API. `build_client()` raises `MissingCredentialsError` with a clear
-message if `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` isn't set —
-`scrapers/pipeline.py` catches that and skips classification loudly rather
-than failing the whole run. **Not yet verified against the live Anthropic
-API** — no key was available in the environment this was built in; see the
-"Implement state-perpetrator classification" entry in `DECISIONS.md`.
+questions are asked in one call to `claude-haiku-4-5` (deliberately not a
+larger model — this is a bounded yes/no classification, cheap and
+well-suited to Haiku; see the "Switch classification model to Haiku 4.5"
+entry in `DECISIONS.md`) with structured JSON output (`output_config.format`,
+so the response always parses) — the full instructions, inclusion/exclusion
+rules, and calibration examples live in `prompts/state_perpetrator_filter.txt`,
+not inline, per the "prompts as files" hard requirement.
+`classify_event()`/`classify_events()` take an injected
+`anthropic.Anthropic`-shaped client, so tests (`tests/test_classify.py`) run
+against a fake client and never touch the live API. `build_client()` raises
+`MissingCredentialsError` with a clear message if
+`ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` isn't set — `scrapers/pipeline.py`
+catches that and skips classification loudly rather than failing the whole
+run. **Verified against the live API** — see the "Verify state-perpetrator
+classification against the live API" entry in `DECISIONS.md`. Running this
+stage against the live API costs real money (small, but non-zero) — see the
+API cost note in the top-level README and CONTRIBUTING.md.
 
 ## pipeline.py
 

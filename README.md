@@ -80,6 +80,27 @@ docker build -t hr-response-tracker .
 docker run --rm hr-response-tracker
 ```
 
+Without any credential, the pipeline still runs end to end — it ingests
+and deduplicates events but skips classification with a clear
+"CLASSIFICATION SKIPPED" notice.
+
+**API cost.** Running classification requires an `ANTHROPIC_API_KEY` and
+calls the Anthropic API — this costs real money, not a lot, but non-zero,
+and it's not something you should be surprised by after forking this. The
+classification stage uses `claude-haiku-4-5` specifically because it's the
+cheapest model that comfortably handles this bounded yes/no task, and each
+call is one short prompt against one event's title/body — see
+`prompts/state_perpetrator_filter.txt` for what's actually sent. If you
+fork this and want to estimate your own cost, check
+[Anthropic's current pricing](https://www.anthropic.com/pricing) against
+your expected daily event volume (typically single digits to low tens of
+events per day from one source) before wiring in a key and running it on a
+schedule.
+
+```bash
+docker run --rm -e ANTHROPIC_API_KEY hr-response-tracker
+```
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow, testing
 against fixtures, and how to add a new source.
 
@@ -98,8 +119,11 @@ the same real-world incident (heuristic: shared country + title similarity
 + a 3-day window — not LLM-verified, see `DECISIONS.md`). `scrapers/classify.py`
 is the LLM classification stage — one call asks both whether an item
 describes a discrete incident and whether it was state-perpetrated, using
-`claude-opus-4-8` with structured JSON output (prompt in
-`prompts/state_perpetrator_filter.txt`). It needs `ANTHROPIC_API_KEY`;
+`claude-haiku-4-5` with structured JSON output (prompt in
+`prompts/state_perpetrator_filter.txt`). Haiku, not a larger model — this
+is a bounded yes/no classification, and Haiku is meaningfully cheaper for a
+daily cron job (see [Running it locally](#running-it-locally) below for
+what that costs, and `DECISIONS.md` for the reasoning). It needs `ANTHROPIC_API_KEY`;
 `scrapers/pipeline.py` runs it after dedup but degrades gracefully — with a
 clear "CLASSIFICATION SKIPPED" notice, not silence — if no key is set, so
 `docker run` still works out of the box. **Verified against the live API

@@ -110,6 +110,14 @@ SKIPPED" notice and produces ingested-but-unclassified output rather than
 failing, so `docker build` + `docker run` with nothing else still works
 for exploration.
 
+**This costs real money.** Classification calls the Anthropic API on every
+event, using `claude-haiku-4-5` specifically to keep that cost small — but
+it's not free, and forkers running this on a daily schedule should expect
+a (small, ongoing) charge on whatever Anthropic account the key belongs to.
+See the "API cost" note in the top-level [README](README.md#running-it-locally)
+before wiring a key into a scheduled run, and never commit a key — `.env`
+and `*.local` are already gitignored for this reason.
+
 ## Code style
 
 - Keep scrapers and parsing logic separate from network calls so they're

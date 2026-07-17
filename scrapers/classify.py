@@ -10,12 +10,17 @@ see prompts/state_perpetrator_filter.txt for the full instructions,
 calibration examples, and the exact inclusion/exclusion rules. See
 DECISIONS.md for why both checks live in one prompt.
 
-Uses the Anthropic API (claude-opus-4-8) with structured JSON output, so the
+Uses the Anthropic API (claude-haiku-4-5) with structured JSON output, so the
 response always parses -- no free-text scraping of the model's answer.
-Requires ANTHROPIC_API_KEY (or an equivalent credential the SDK can resolve)
-in the environment; raises clearly if none is available rather than
-silently skipping classification. Never called from tests with a live key --
-tests inject a fake client that mimics the `.messages.create()` interface.
+Haiku, not Opus: this is a bounded two-question yes/no classification, well
+within a smaller model's ability, and meaningfully cheaper to run daily as
+event volume grows -- see DECISIONS.md. Requires ANTHROPIC_API_KEY (or an
+equivalent credential the SDK can resolve) in the environment; raises
+clearly if none is available rather than silently skipping classification.
+Running this against the live API costs real (small) money -- see the
+"API cost" note in README.md/CONTRIBUTING.md. Never called from tests with
+a live key -- tests inject a fake client that mimics the
+`.messages.create()` interface.
 """
 
 from __future__ import annotations
@@ -28,7 +33,7 @@ from typing import Any
 
 import anthropic
 
-MODEL = "claude-opus-4-8"
+MODEL = "claude-haiku-4-5"
 PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "state_perpetrator_filter.txt"
 
 RESPONSE_SCHEMA = {
