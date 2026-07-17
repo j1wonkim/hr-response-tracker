@@ -893,6 +893,23 @@ to treat as a minor tweak.
 
 ---
 
+## 2026-07-17 — gold_pairs.csv date-range strategy for slice 3 validation
+
+**Context:** planning `tests/fixtures/gold_pairs.csv`, the hand-labeled event–respondent validation set CLAUDE.md's build order item 3 calls for (~30 pairs; one row per (event, respondent) judgment; `is_match=0` rows are hard negatives the matcher must reject; `no_response` rows are closed-window verified silences). The file itself has not been created yet — this entry records the date-range policy agreed before building it, not the file's contents.
+
+**Decision:** split the 30 rows by role rather than applying one uniform date range:
+- **Matched pairs (`is_match=1`) and non-`no_response` hard negatives** may be pulled from any date, including events as recent as launch day. Recency doesn't affect whether a match/non-match judgment is valid.
+- **`no_response` rows** must have a *closed* 30-day response window as of whenever the file is frozen. As of this decision (2026-07-17), that means `no_response` event dates must be on or before roughly 2026-06-02 — 30 days plus a safety buffer for labeling lag, not the strict minimum.
+- `no_response` rows must additionally be verified by hand against the respondent's real site for the relevant 30-day window, not just against `scrapers/mofa.py`'s (or any future adapter's) current crawl cache, since that cache only starts from whenever the adapter itself began crawling.
+
+**Rationale:** a `no_response` label is only valid evidence of verified silence if the 30-day window has actually elapsed; labeling based on "most recent" (e.g., pulling from HRW's currently-fetched feed pile, which spans roughly one week) would certify silence for events whose window is still open, and any of those could still receive a real response later — silently corrupting a fixture that's supposed to be a frozen, trustworthy ground truth. This exact proposal ("30 most recent cases, starting from whatever's in the RSS crawler's pile at launch") was raised and rejected for this reason. Matched pairs and non-`no_response` hard negatives have no such constraint, since their correctness doesn't depend on time having passed.
+
+**Alternatives considered:**
+- **Wait ~45 days after launch, then build the entire 30-pair set from genuinely "post-launch" data.** Rejected as the default — it delays validating slice 3's `no_response` handling by over a month for no benefit, when a closed-window range already exists (Jan 1 – Jun 2, 2026) that can be used immediately for that subset.
+- **Use "most recent" uniformly across all 30 rows.** Rejected — works for matched/hard-negative rows but breaks `no_response` rows for the reason above; a uniform policy across row types isn't achievable without violating one or the other.
+
+---
+
 <!--
 Template for new entries:
 
