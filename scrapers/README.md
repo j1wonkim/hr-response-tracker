@@ -1,7 +1,7 @@
 # scrapers/
 
 Scraper code for both sides of the pipeline: human rights org event
-ingestion (Amnesty, HRW) and foreign ministry response monitoring. Ministry
+ingestion (currently HRW) and foreign ministry response monitoring. Ministry
 sources share a common adapter interface and are declared via config
 (YAML/JSON) wherever possible — see [CONTRIBUTING.md](../CONTRIBUTING.md)
 for how to add one.
@@ -13,37 +13,9 @@ helper used by every scraper (default 20h cache TTL), so "crawl once daily,
 cache aggressively" is enforced in one place rather than reimplemented per
 source.
 
-## amnesty.py
-
-Fetches and parses Amnesty International's global RSS feed
-(`https://www.amnesty.org/en/feed/`), which covers `/latest/news/` content
-and carries Amnesty's own taxonomy (country/region, topic, content-type,
-resource-type) as custom `<amn:*>` RSS elements — no HTML scraping needed.
-`parse_feed()` is the pure, skip-tolerant parsing function tested against
-the fixture in `tests/fixtures/amnesty/feed_sample.xml` (a malformed item
-is recorded and skipped, not fatal); `parse_events()` is a thin wrapper
-returning just the event list. Run directly with `python -m scrapers.amnesty`
-to fetch, filter, write `data/amnesty_events.json`, and print/write a run
-report.
-
-Ingestion is narrowed to resource type `Action`/`Urgent Action` via
-`filter_by_resource_type()` — reports, research briefings, etc. are
-excluded (see the "Narrow ingestion to Action / Urgent Action resource
-types" entry in `DECISIONS.md`). **Known gap:** that content lives almost
-entirely at `amnesty.org/en/documents/...` URLs, which this RSS feed
-doesn't reach — the filter is correct but currently yields close to zero
-events. Same DECISIONS.md entry has the detail; not yet resolved.
-
-Deliberately out of scope here: determining the perpetrating actor and
-filtering to state-perpetrated violations, which CLAUDE.md assigns to a
-separate LLM classification call (a later pipeline stage). See the module
-docstring and `DECISIONS.md` for the country/region split heuristic.
-
 ## hrw.py
 
-Second event source, added specifically because Amnesty's ingestion can't
-reach most of its own Action/Urgent Action content (see above). Two-phase,
-unlike Amnesty's single feed request, because HRW's RSS feed
+The event-ingestion source. Two-phase, because HRW's RSS feed
 (`https://www.hrw.org/rss/news`) carries no country/topic/news-type
 taxonomy — only the article page does. `parse_feed_index()` (pure,
 skip-tolerant) parses the feed into bare index items; `parse_article_page()`
@@ -62,29 +34,59 @@ Narrowed to news type `News Release`/`Statement` via `filter_by_news_type()`
 `Letter`, considered and deferred), plus a known nuance where a US
 policy-area label was seen tagged as if it were a country.
 
+Amnesty (`scrapers/amnesty.py`) was the original event source and has been
+removed from the codebase — its Action/Urgent Action content lives almost
+entirely at `amnesty.org/en/documents/...` URLs that its RSS feed, REST
+API, and sitemap all fail to expose. See "Drop Amnesty as an event source"
+in `DECISIONS.md` for the full history (RSS-vs-HTML decision, the
+`/en/documents/` gap, and the live-run evidence that finally settled it).
+
 ## dedup.py
 
-Merges events reported by more than one source as the same real-world
-incident: two events are merged only if they share a country, have similar
-titles (`difflib` ratio >= 0.6), and were published within 3 days of each
-other — a deterministic heuristic, not the LLM-verified matching CLAUDE.md
-specifies for event–statement linking (stage 3), since no LLM
-infrastructure exists yet. `deduplicate_events()` is pure and works on any
-mix of event objects (`AmnestyEvent`, `HRWEvent`, ...) via duck-typing.
-Kept events are `unique_events`; merged-away events aren't discarded, they're
-recorded in `groups` (a `DuplicateGroup` per cluster, with what matched) for
-audit. See the "Cross-source event deduplication" entry in `DECISIONS.md`
-for the thresholds' rationale and known limitations (greedy clustering, not
-full transitive closure).
+Merges events that report the same real-world incident more than once:
+two events are merged only if they share a country, have similar titles
+(`difflib` ratio >= 0.6), and were published within 3 days of each other —
+a deterministic heuristic, not the LLM-verified matching CLAUDE.md
+specifies for event–statement linking (stage 3). `deduplicate_events()` is
+pure and works on any event object via duck-typing (`.title`,
+`.published_at`, `.countries`, `.source`, `.url`, `.id`) — built for
+cross-source duplicates when Amnesty and HRW both ran, kept now because a
+single source can still publish near-duplicates and a second source can be
+added back without changing this module. Kept events are `unique_events`;
+merged-away events aren't discarded, they're recorded in `groups` (a
+`DuplicateGroup` per cluster, with what matched) for audit. See the
+"Cross-source event deduplication" entry in `DECISIONS.md` for the
+thresholds' rationale and known limitations (greedy clustering, not full
+transitive closure).
+
+## classify.py
+
+The LLM classification stage CLAUDE.md's stage 1 specifies ("an LLM
+classification call: 'Is the government the responsible actor?'"), plus a
+second check a live pipeline run surfaced the need for: whether the item
+describes a discrete incident at all (a documentary-premiere announcement
+passed the News Release filter but isn't a violation report). Both
+questions are asked in one call to `claude-opus-4-8` with structured JSON
+output (`output_config.format`, so the response always parses) — the full
+instructions, inclusion/exclusion rules, and calibration examples live in
+`prompts/state_perpetrator_filter.txt`, not inline, per the "prompts as
+files" hard requirement. `classify_event()`/`classify_events()` take an
+injected `anthropic.Anthropic`-shaped client, so tests
+(`tests/test_classify.py`) run against a fake client and never touch the
+live API. `build_client()` raises `MissingCredentialsError` with a clear
+message if `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` isn't set —
+`scrapers/pipeline.py` catches that and skips classification loudly rather
+than failing the whole run. **Not yet verified against the live Anthropic
+API** — no key was available in the environment this was built in; see the
+"Implement state-perpetrator classification" entry in `DECISIONS.md`.
 
 ## pipeline.py
 
-The combined entrypoint: runs Amnesty and HRW ingestion, applies each
-source's filter, deduplicates the combined set, and writes one
-`data/events.json` plus one run report covering both sources together.
-Run directly with `python -m scrapers.pipeline`. Individual sources can
-still be run standalone (`python -m scrapers.amnesty` / `scrapers.hrw`) for
-debugging one source in isolation.
+The entrypoint: runs HRW ingestion, applies the news-type filter,
+deduplicates, classifies (if a credential is available), and writes
+`data/events.json` plus a run report. Run directly with
+`python -m scrapers.pipeline`; `scrapers/hrw.py` can still be run standalone
+for debugging ingestion in isolation from classification.
 
 ## report.py
 

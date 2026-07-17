@@ -1,12 +1,27 @@
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
-from scrapers.amnesty import AmnestyEvent
 from scrapers.dedup import DATE_WINDOW_DAYS, TITLE_SIMILARITY_THRESHOLD, deduplicate_events
 from scrapers.hrw import HRWEvent
 
 
-def _amnesty(id_, title, published_at, countries):
-    return AmnestyEvent(id=id_, title=title, url=f"https://amnesty.org/{id_}", published_at=published_at, countries=countries)
+@dataclass
+class FakeEvent:
+    """Minimal stand-in for a second event source. dedup.py works by duck
+    typing (.title/.published_at/.countries/.source/.url/.id), so this
+    proves dedup works across different object types without depending on
+    any specific source module."""
+
+    id: str
+    title: str
+    url: str
+    published_at: datetime | None
+    countries: list[str] = field(default_factory=list)
+    source: str = "fake"
+
+
+def _fake(id_, title, published_at, countries):
+    return FakeEvent(id=id_, title=title, url=f"https://fake-source.example/{id_}", published_at=published_at, countries=countries)
 
 
 def _hrw(id_, title, published_at, countries):
@@ -17,7 +32,7 @@ NOW = datetime(2026, 7, 16, 12, 0, tzinfo=timezone.utc)
 
 
 def test_cross_source_duplicate_is_merged():
-    a = _amnesty("a1", "Libya: ICC Greenlights First Case to Move to Trial", NOW, ["Libya"])
+    a = _fake("a1", "Libya: ICC Greenlights First Case to Move to Trial", NOW, ["Libya"])
     b = _hrw("h1", "Libya: ICC Greenlights First Case to Move to Trial", NOW + timedelta(days=1), ["Libya"])
 
     result = deduplicate_events([a, b])
@@ -32,7 +47,7 @@ def test_cross_source_duplicate_is_merged():
 
 
 def test_different_countries_not_merged():
-    a = _amnesty("a1", "Government Cracks Down on Protesters", NOW, ["Egypt"])
+    a = _fake("a1", "Government Cracks Down on Protesters", NOW, ["Egypt"])
     b = _hrw("h1", "Government Cracks Down on Protesters", NOW, ["Sudan"])
 
     result = deduplicate_events([a, b])
@@ -42,7 +57,7 @@ def test_different_countries_not_merged():
 
 
 def test_dissimilar_titles_not_merged():
-    a = _amnesty("a1", "Libya: ICC Greenlights First Case to Move to Trial", NOW, ["Libya"])
+    a = _fake("a1", "Libya: ICC Greenlights First Case to Move to Trial", NOW, ["Libya"])
     b = _hrw("h1", "Tunisia: Migration Deal Worsening Human Rights Violations", NOW, ["Libya"])
 
     result = deduplicate_events([a, b])
@@ -52,7 +67,7 @@ def test_dissimilar_titles_not_merged():
 
 
 def test_outside_date_window_not_merged():
-    a = _amnesty("a1", "Libya: ICC Greenlights First Case to Move to Trial", NOW, ["Libya"])
+    a = _fake("a1", "Libya: ICC Greenlights First Case to Move to Trial", NOW, ["Libya"])
     b = _hrw("h1", "Libya: ICC Greenlights First Case to Move to Trial", NOW + timedelta(days=DATE_WINDOW_DAYS + 1), ["Libya"])
 
     result = deduplicate_events([a, b])
@@ -62,7 +77,7 @@ def test_outside_date_window_not_merged():
 
 
 def test_events_with_no_published_at_are_never_merged():
-    a = _amnesty("a1", "Libya: ICC Greenlights First Case to Move to Trial", None, ["Libya"])
+    a = _fake("a1", "Libya: ICC Greenlights First Case to Move to Trial", None, ["Libya"])
     b = _hrw("h1", "Libya: ICC Greenlights First Case to Move to Trial", None, ["Libya"])
 
     result = deduplicate_events([a, b])
@@ -72,9 +87,9 @@ def test_events_with_no_published_at_are_never_merged():
 
 
 def test_three_way_cluster_keeps_one_primary():
-    a = _amnesty("a1", "Uganda: Military Seizing Government Critics", NOW, ["Uganda"])
+    a = _fake("a1", "Uganda: Military Seizing Government Critics", NOW, ["Uganda"])
     b = _hrw("h1", "Uganda: Military Seizing Government Critics", NOW + timedelta(hours=6), ["Uganda"])
-    c = _amnesty("a2", "Uganda: Military Seizing Government Critics", NOW + timedelta(days=1), ["Uganda"])
+    c = _fake("a2", "Uganda: Military Seizing Government Critics", NOW + timedelta(days=1), ["Uganda"])
 
     result = deduplicate_events([a, b, c])
 
@@ -84,9 +99,9 @@ def test_three_way_cluster_keeps_one_primary():
 
 
 def test_unrelated_events_all_kept():
-    a = _amnesty("a1", "Libya: ICC Greenlights First Case to Move to Trial", NOW, ["Libya"])
+    a = _fake("a1", "Libya: ICC Greenlights First Case to Move to Trial", NOW, ["Libya"])
     b = _hrw("h1", "Peru: Veto Military Justice Bill", NOW, ["Peru"])
-    c = _amnesty("a2", "Bangladesh: Landslides Deadly for Rohingya Refugees", NOW, ["Bangladesh"])
+    c = _fake("a2", "Bangladesh: Landslides Deadly for Rohingya Refugees", NOW, ["Bangladesh"])
 
     result = deduplicate_events([a, b, c])
 

@@ -1,24 +1,29 @@
-"""Cross-source event deduplication (Amnesty + HRW, more as sources are added).
+"""Event deduplication -- built for cross-source duplicates, still useful
+with one source.
 
-Two organizations often report on the same real-world incident within a
-few days of each other. Left unmerged, that incident would produce two
-rows in the event set, each separately eligible for event-statement
-linking (stage 3) -- silently double-counting a single incident in the
-response matrix.
+Originally added because Amnesty and HRW sometimes reported the same
+real-world incident within days of each other (Amnesty has since been
+dropped as a source -- see DECISIONS.md, 2026-07-16/17). Kept and still
+runs: a single source can itself publish more than one item about the same
+incident (e.g. an initial News Release followed by a Statement with the
+same facts), and the moment a second source is added back, this needs no
+changes. Left unmerged, a duplicate incident would produce two rows in the
+event set, each separately eligible for event-statement linking (stage 3)
+-- silently double-counting a single incident in the response matrix.
 
 This is a deterministic heuristic pass, NOT the LLM-verified
 entity/embedding matching CLAUDE.md specifies for event-statement linking
-(stage 3) -- no LLM infrastructure exists yet in this repo. Two events are
-considered duplicates only if ALL of: they share at least one country,
-their titles are similar (difflib ratio >= TITLE_SIMILARITY_THRESHOLD), and
-they were published within DATE_WINDOW_DAYS of each other. Intentionally
-conservative (favors under-merging over silently collapsing two distinct
-events) until real cross-source duplicate examples are available to tune
-against -- see DECISIONS.md.
+(stage 3) -- that's a different pipeline stage with its own LLM call
+(scrapers/classify.py handles a different LLM check: state-perpetrator
+classification, not event matching). Two events are considered duplicates
+only if ALL of: they share at least one country, their titles are similar
+(difflib ratio >= TITLE_SIMILARITY_THRESHOLD), and they were published
+within DATE_WINDOW_DAYS of each other. Intentionally conservative (favors
+under-merging over silently collapsing two distinct events) until real
+duplicate examples are available to tune against -- see DECISIONS.md.
 
 Works on any event objects exposing .title, .published_at, .countries,
-.source, .url, .id (both AmnestyEvent and HRWEvent qualify; no shared base
-class required).
+.source, .url, .id (HRWEvent qualifies; no shared base class required).
 """
 
 from __future__ import annotations

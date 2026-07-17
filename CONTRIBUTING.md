@@ -37,9 +37,9 @@ source. The pipeline is designed so this requires minimal code:
    skipped/unparseable items. Reuse `scrapers/report.py`'s
    `build_run_report()` (it duck-types on `.published_at`/`.countries`,
    so it works for any adapter's event objects) rather than inventing a new
-   format; see `scrapers/amnesty.py`'s or `scrapers/hrw.py`'s `__main__`
-   block for the single-source pattern, or `scrapers/pipeline.py` for how
-   multiple sources are combined, deduplicated, and reported on together.
+   format; see `scrapers/hrw.py`'s `__main__` block for the pattern, or
+   `scrapers/pipeline.py` for how sources are deduplicated and reported on
+   together.
 6. **Respect robots.txt and rate limits.** The pipeline crawls once daily.
    New adapters must not introduce aggressive polling. Some sources (e.g.
    China MFA) are known to block or throttle aggressive crawlers — cache
@@ -93,6 +93,22 @@ Run tests inside the container:
 ```bash
 docker run --rm hr-response-tracker pytest
 ```
+
+Tests never call the live Anthropic API — `scrapers/classify.py`'s tests
+inject a fake client (see `tests/test_classify.py`), so no credential is
+needed to run the suite. To exercise the real classification stage
+(`scrapers/pipeline.py`'s `docker run --rm hr-response-tracker` default,
+or `python -m scrapers.pipeline` directly), set `ANTHROPIC_API_KEY` and
+pass it into the container:
+
+```bash
+docker run --rm -e ANTHROPIC_API_KEY hr-response-tracker
+```
+
+Without it, the pipeline still runs — it prints a clear "CLASSIFICATION
+SKIPPED" notice and produces ingested-but-unclassified output rather than
+failing, so `docker build` + `docker run` with nothing else still works
+for exploration.
 
 ## Code style
 

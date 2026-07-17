@@ -288,6 +288,8 @@ is the right approach first.
 
 ## 2026-07-17 — Add Human Rights Watch as a second event source
 
+**Superseded** by [2026-07-17 — Drop Amnesty as an event source](#2026-07-17--drop-amnesty-as-an-event-source) below, same day: "alongside Amnesty, not a replacement" (this entry's framing) turned out to be wrong once a live pipeline run confirmed Amnesty was contributing zero events in practice, not just in the worst case. HRW itself is unaffected — this note only corrects the "not a replacement" claim.
+
 **Decision:** `scrapers/hrw.py` ingests Human Rights Watch news
 (`hrw.org/news`, via the RSS feed at `hrw.org/rss/news`) as a second event
 source alongside Amnesty, not a replacement. Narrowed the same way as
@@ -397,6 +399,102 @@ dedup entirely until stage 3's LLM/embedding infrastructure exists was
 considered, but rejected: shipping known-duplicate rows into the response
 matrix in the meantime was judged worse than a conservative, honestly-
 limited heuristic that can be tightened later.
+
+---
+
+## 2026-07-17 — Drop Amnesty as an event source
+
+**Decision:** `scrapers/amnesty.py`, its tests, and its fixtures are
+deleted. HRW is now the sole event-ingestion source. `scrapers/pipeline.py`
+no longer references Amnesty at all.
+
+**Rationale:** This was a theoretical concern (the `/en/documents/` gap,
+logged 2026-07-16) until a live pipeline run on 2026-07-17 made it
+empirical: with real requests against the real Amnesty RSS feed, the
+`Action`/`Urgent Action` filter returned **0 events out of 12 raw items** —
+not a worst case, the actual outcome. Every avenue checked at the time
+(RSS feed, REST API, XML sitemap) failed to expose the content the filter
+is supposed to select, and no new avenue has been found since. Keeping a
+scraper that reliably contributes nothing to the live dataset is worse
+than removing it: it adds maintenance surface (a `REGION_NAMES` list to
+keep in sync, a resource-type filter to keep in sync with Amnesty's
+taxonomy), it made `scrapers/dedup.py`'s cross-source design untestable
+against real duplicate pairs (the previous entry above notes 0 duplicates
+found, precisely because Amnesty contributed 0 events to cross-match
+against), and it implied the dataset covers Amnesty when it structurally
+does not.
+
+**Alternatives considered:** Keeping the code but excluding it from
+`scrapers/pipeline.py` (dormant, not deleted) was considered and rejected
+— dead code that still claims to be a working scraper in its own
+docstrings and tests is more misleading than no code at all, and nothing
+about git history or this decision log is lost by deleting it (both
+preserve exactly how it worked and why it was dropped). Waiting for a
+proper `/en/documents/` ingestion path before dropping Amnesty was
+rejected: that path was never found despite the investigation logged
+2026-07-16, and the project already has a working single source (HRW) —
+there's no reason to keep a non-contributing scraper "just in case" a
+solution turns up later. If one does, re-adding Amnesty is a new,
+separately-justified decision, not a revival of dead code.
+
+---
+
+## 2026-07-17 — Implement state-perpetrator + discrete-incident classification
+
+**Decision:** `scrapers/classify.py` implements the LLM classification
+call CLAUDE.md's stage 1 has always specified ("Is the government the
+responsible actor?"), extended with a second question a live pipeline run
+surfaced: does the item describe a discrete incident at all? Both
+questions are asked in a single call to `claude-opus-4-8` with structured
+JSON output. The full instructions — inclusion/exclusion rules and three
+calibration examples — live in `prompts/state_perpetrator_filter.txt`, not
+inline in code, per the "prompts as files" hard requirement. An event must
+pass both checks to enter the dataset.
+
+**Rationale — why a second check, not just the one CLAUDE.md named:** A
+2026-07-17 live run showed "Immersive Documentary Centers Human Rights in
+Climate Crisis" — a film premiere announcement — passing HRW's
+`News Release` filter cleanly, because it genuinely is HRW's `News
+Release` type on their site; the news-type filter (stage 1's first half)
+correctly does its job of excluding ongoing-practice documentation, but it
+was never designed to catch an announcement that carries the right resource
+type while describing no incident at all. Asking "is the government the
+perpetrator" alone would not have caught this either — the natural fix is
+a prior question: is there an incident here in the first place? Combining
+both checks into one call (rather than two separate LLM calls) was chosen
+for cost and latency — one classification pass per event rather than two,
+and the two questions share nearly all their context (the same title/body
+text).
+
+**Scope and integration:** Runs after `scrapers/dedup.py`, not before —
+classifying content that's about to be discarded as a duplicate wastes a
+call. Requires `ANTHROPIC_API_KEY` (or `ANTHROPIC_AUTH_TOKEN`);
+`scrapers/pipeline.py` catches the missing-credential case and skips
+classification with a clear, printed "CLASSIFICATION SKIPPED" notice
+rather than failing the run or silently shipping unclassified events as if
+they'd passed — CLAUDE.md's "forkers should be able to run the full
+pipeline with docker build + docker run and nothing else" hard requirement
+predates this stage, and a working exploratory run without a key was
+judged more valuable than a hard failure, as long as the skip is loud.
+
+**Not yet verified against the live API:** this was built and tested
+entirely against a fake client (`tests/test_classify.py`) — no
+`ANTHROPIC_API_KEY` was available in the environment this was built in.
+The prompt's calibration examples and inclusion/exclusion rules have not
+been checked against real model output yet; treat the classification
+behavior as unverified until a live run happens with a real key.
+
+**Alternatives considered:** Two separate LLM calls (one for "is this an
+incident", one for "is it state-perpetrated") were considered and
+rejected — doubles cost and latency per event for no accuracy benefit the
+maintainer asked for, since the two checks share context and a single
+well-structured prompt can ask both reliably. Filtering "is this an
+incident" with a cheaper heuristic (e.g. keyword rules) instead of an LLM
+call was considered and rejected: the failure case that motivated this
+(a documentary premiere with human-rights-adjacent language) is exactly
+the kind of judgment call keyword matching handles badly, and the
+maintainer's own framing of the requirement was already phrased as a
+question for a classifier, not a rule set.
 
 ---
 

@@ -1,0 +1,78 @@
+You are helping build a public dataset that tracks how states respond when
+they are accused of human rights violations. Before an item enters that
+dataset, it must pass two checks. Read the item below and answer both.
+
+CHECK 1 — Is this a discrete, datable incident?
+
+Answer yes only if the item reports a specific event: something that
+happened, to identifiable people, at a knowable time and place (even if the
+exact date is approximate, e.g. "last week" or "since June"). A pattern
+described entirely in the abstract does not count on its own — there must be
+at least one concrete instance.
+
+Answer no for: report/research launches that summarize findings without
+describing a specific incident in the launch text itself; documentary,
+film, or media project announcements; event/conference/campaign
+announcements; personnel or organizational news (hires, awards, obituaries
+of staff); procedural legislative updates that don't describe a violation
+("Parliament will vote on X next week"); pure opinion or commentary with no
+underlying incident; and follow-up items that only restate a previously
+reported incident without new facts (further-information-only updates with
+no new development).
+
+CHECK 2 — If it is an incident, was it committed by the government or its
+agents?
+
+Answer yes only if the alleged perpetrator is: the national government or
+a named ministry/agency; police; military or paramilitary forces acting on
+government orders; prison, detention, or corrections officials; state
+security or intelligence services; the judiciary, when the accusation is
+that courts were used as an instrument of repression (e.g. politically
+motivated prosecution, denial of due process); or a militia/proxy force
+that the item itself describes as government-directed, government-backed,
+or acting with state acquiescence.
+
+Answer no if the alleged perpetrator is: a private individual or company
+acting on its own; a non-state armed group, rebel group, or terrorist
+organization with no described state direction; a foreign government other
+than the one the item is about (unless that foreign government is itself
+the accused perpetrator against its own population or territory it
+controls); or a natural disaster, accident, or non-human cause.
+
+If the item alleges harm but does not name or clearly identify a
+perpetrator, answer no to Check 2 (state responsibility must be asserted,
+not merely possible).
+
+CALIBRATION EXAMPLES
+
+Example A — should score is_incident: false
+Title: "Immersive Documentary Centers Human Rights in Climate Crisis"
+This describes the premiere of a documentary film. No specific violation
+against specific people at a specific time is reported in the item itself.
+
+Example B — should score is_incident: true, is_state_perpetrated: true,
+perpetrator: "Uganda military / UPDF"
+Title: "Uganda: Military Seizing Government Critics"
+The item names specific individuals (a lawyer, an activist, opposition
+figures), specific dates in June and July, and identifies the Uganda
+People's Defence Force and named military officials as the actors who
+detained them.
+
+Example C — should score is_incident: true, is_state_perpetrated: false,
+perpetrator: null
+Title: "Gang Violence Displaces Thousands in [Country]"
+A specific, datable incident, but the perpetrator described is a criminal
+gang with no described government direction — Check 1 passes, Check 2 does
+not.
+
+OUTPUT
+
+Respond with a single JSON object matching the required schema:
+- is_incident: boolean, per Check 1.
+- is_state_perpetrated: boolean, per Check 2. Must be false if is_incident
+  is false.
+- perpetrator: the specific actor identified (e.g. "Uganda military",
+  "Egyptian State Security"), or null if is_state_perpetrated is false or
+  no specific actor is named.
+- rationale: one or two sentences citing what in the text drove each
+  answer.
