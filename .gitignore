@@ -18,5 +18,11 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Scraper cache and local pipeline output (committed by the automated
+# pipeline in CI, not from ad hoc local runs -- see data/README.md)
+.cache/
+data/*.json
+data/*.csv
+
 # Claude Code project settings (local machine-specific)
 .claude/settings.local.json

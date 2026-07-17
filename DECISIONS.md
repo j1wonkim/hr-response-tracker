@@ -180,6 +180,60 @@ inconsistent.
 
 ---
 
+## 2026-07-16 — Amnesty ingestion via RSS feed, not HTML scraping
+
+**Decision:** `scrapers/amnesty.py` (slice 1) ingests events from Amnesty's
+global RSS feed (`https://www.amnesty.org/en/feed/`) rather than scraping
+the `/en/latest/news/` HTML listing page. The feed carries Amnesty's own
+taxonomy as custom `<amn:*>` elements (content-type, resource-type, topic,
+and a `countries` list) alongside the standard title/link/pubDate/
+description/content:encoded fields.
+
+**Rationale:** Inspecting the live site (2026-07-16) showed the HTML
+article template does not reliably expose country/topic tags in the
+article content itself — the only country-like links found on an article
+page came from an unrelated "related content" grid widget and a generic
+sidebar menu that mixes countries and regions with no way to tell them
+apart from markup alone. The RSS feed, by contrast, has explicit
+Amnesty-curated `<amn:countries>`, `<amn:topics>`, `<amn:content-types>`,
+and `<amn:resource-types>` elements per item, and also satisfies the "RSS
+where available" preference already stated in the ingestion stage
+description. One feed request also replaces what would otherwise be one
+listing-page request plus one request per article, which is more polite to
+Amnesty's servers.
+
+**Scope boundary — perpetrating actor is not extracted here:** The feed
+does not identify who committed a violation, only what/where/when it was
+reported. Determining the perpetrating actor and filtering to
+state-perpetrated violations remains a separate LLM classification call
+(as already specified for this stage), applied downstream of this scraper,
+not inside it.
+
+**Country vs. region split is a maintained list, not derived from the
+feed:** `<amn:countries>` mixes actual countries (e.g. "Myanmar") with
+Amnesty's own continent/subregion taxonomy (e.g. "Asia and the Pacific",
+"South Asia") in the same flat list, with nothing in the markup to tell
+them apart. `scrapers/amnesty.py` splits them using a hardcoded
+`REGION_NAMES` set, populated from region names actually observed in the
+feed and the news-page country filter facets on 2026-07-16. This is a
+maintained list, not a general solution — if Amnesty adds a new region
+name, events tagged with it will be miscounted as a country until the list
+is updated.
+
+**Alternatives considered:** Scraping the HTML listing/article pages was
+rejected per the reasoning above — no reliable, request-free source of
+country tagging was found there. Treating the raw `<amn:countries>` list as
+undifferentiated "location tags" (skipping the country/region split
+entirely) was considered and rejected because the response matrix
+(`CLAUDE.md` stage 6) is keyed on country, and passing regions through
+as if they were countries would corrupt it. A full ISO-3166 lookup was
+considered but rejected as overkill — Amnesty's own taxonomy already
+distinguishes region names by name, just not by markup, so a maintained
+list of the (small, low-churn) region names is simpler than reimplementing
+country/region classification from scratch.
+
+---
+
 <!--
 Template for new entries:
 

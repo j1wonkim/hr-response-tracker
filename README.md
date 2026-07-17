@@ -76,9 +76,14 @@ against fixtures, and how to add a new source.
 
 ## Current state
 
-Repo scaffolding only: license files, decision log, Dockerfile, and this
-README. The Amnesty scraper (slice 1) has not been built yet. Build order
-and architecture are documented in `CLAUDE.md`.
+Slice 1 is done: `scrapers/amnesty.py` fetches and parses Amnesty
+International's RSS feed into structured events (date, title, url,
+country/region tags, summary/body text), tested against a fixture in
+`tests/fixtures/amnesty/`. It does not yet determine the perpetrating actor
+or filter to state-perpetrated violations — that's a separate LLM
+classification call, still to come. No ministry-side scraping, linking,
+classification, automation, or visualization yet. Build order and
+architecture are documented in `CLAUDE.md`.
 
 ## Data & citation
 

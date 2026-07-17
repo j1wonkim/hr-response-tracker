@@ -52,7 +52,7 @@ Maintainer: Jiwon (political scientist). This is an open community project: the 
 - **Fork-friendly by design:** Include `CONTRIBUTING.md` with "how to add a new ministry adapter" as the primary contribution path. New sources must be addable via config (YAML) wherever possible. README prominently invites forks.
 - **Prompts as files:** All LLM prompts (violation filter, classifier, matcher) live as text files in `prompts/`, not inline in code, so they can be tuned and versioned independently.
 - **Polite scraping:** Respect robots.txt, rate-limit, cache aggressively, crawl once daily. China MFA is known to block aggressive crawlers.
-- **Fixture-based tests:** Parsers are tested against saved HTML snapshots, never live sites.
+- **Fixture-based tests:** Parsers are tested against saved snapshots (HTML, or feed XML where a source is scraped via RSS/Atom), never live sites.
 
 ## Session hygiene
 
@@ -60,4 +60,4 @@ At the end of each working session, update this file's "Current state" section a
 
 ## Current state
 
-Nothing built yet. First task: initialize repo structure, LICENSE files, DECISIONS.md, CONTRIBUTING.md, README skeleton with citation block and fork invitation, Dockerfile, then start slice 1 (Amnesty scraper inside the container).
+Repo scaffolding done (LICENSE files, DECISIONS.md, CONTRIBUTING.md, README, Dockerfile). Slice 1 done: `scrapers/amnesty.py` ingests Amnesty's RSS feed (`https://www.amnesty.org/en/feed/`) rather than scraping HTML — see the 2026-07-16 "Amnesty ingestion via RSS feed" entry in `DECISIONS.md` for why, and its "country vs. region split" caveat (a maintained `REGION_NAMES` list, not derived from the feed). Tested against `tests/fixtures/amnesty/feed_sample.xml`; passes via `docker run --rm hr-response-tracker pytest`. Does not yet determine the perpetrating actor or filter to state-perpetrated violations (that LLM classification call is still to come). Next: the ministry-side adapter interface, starting with US State Dept (build order item 2).

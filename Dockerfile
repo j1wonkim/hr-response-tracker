@@ -12,6 +12,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Then bring in the rest of the project.
 COPY . .
 
-# Placeholder entrypoint until the pipeline (scrape -> link -> classify ->
-# commit) exists. Replace once slice 1 (Amnesty scraper) lands.
-CMD ["python", "-c", "print('hr-response-tracker: pipeline not implemented yet')"]
+# Runs the Amnesty scraper (the only pipeline stage that exists so far).
+# Replace with the full scrape -> link -> classify -> commit pipeline as
+# later slices land.
+CMD ["python", "-m", "scrapers.amnesty"]
