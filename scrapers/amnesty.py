@@ -33,24 +33,17 @@ from __future__ import annotations
 
 import json
 import re
-import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 
-import requests
 from bs4 import BeautifulSoup
 
+from scrapers.http import fetch_raw_cached
+
 FEED_URL = "https://www.amnesty.org/en/feed/"
-
-DEFAULT_USER_AGENT = (
-    "hr-response-tracker/0.1 "
-    "(+https://github.com/j1wonkim/hr-response-tracker)"
-)
-
-DEFAULT_CACHE_MAX_AGE_HOURS = 20
 
 NAMESPACES = {
     "content": "http://purl.org/rss/1.0/modules/content/",
@@ -209,36 +202,10 @@ def filter_by_resource_type(
     return [e for e in events if set(e.resource_types) & include]
 
 
-def fetch_raw(url: str = FEED_URL, timeout: int = 15, user_agent: str = DEFAULT_USER_AGENT) -> str:
-    response = requests.get(url, headers={"User-Agent": user_agent}, timeout=timeout)
-    response.raise_for_status()
-    return response.text
-
-
-def fetch_raw_cached(
-    cache_path: Path,
-    url: str = FEED_URL,
-    max_age_hours: float = DEFAULT_CACHE_MAX_AGE_HOURS,
-    **kwargs,
-) -> str:
-    """Read from a local cache file if it's fresh enough, otherwise fetch and
-    refresh the cache. Keeps the pipeline to one request per day per the
-    "crawl once daily, cache aggressively" requirement."""
-    if cache_path.exists():
-        age_seconds = time.time() - cache_path.stat().st_mtime
-        if age_seconds < max_age_hours * 3600:
-            return cache_path.read_text(encoding="utf-8")
-
-    raw = fetch_raw(url, **kwargs)
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    cache_path.write_text(raw, encoding="utf-8")
-    return raw
-
-
 if __name__ == "__main__":
     from scrapers.report import build_run_report
 
-    result = parse_feed(fetch_raw_cached(Path(".cache/amnesty_feed.xml")))
+    result = parse_feed(fetch_raw_cached(Path(".cache/amnesty_feed.xml"), url=FEED_URL))
     events = filter_by_resource_type(result.events)
 
     out_path = Path("data/amnesty_events.json")

@@ -1,9 +1,17 @@
 # scrapers/
 
-Scraper code for both sides of the pipeline: Amnesty International event
-ingestion and foreign ministry response monitoring. Ministry sources share a
-common adapter interface and are declared via config (YAML/JSON) wherever
-possible — see [CONTRIBUTING.md](../CONTRIBUTING.md) for how to add one.
+Scraper code for both sides of the pipeline: human rights org event
+ingestion (Amnesty, HRW) and foreign ministry response monitoring. Ministry
+sources share a common adapter interface and are declared via config
+(YAML/JSON) wherever possible — see [CONTRIBUTING.md](../CONTRIBUTING.md)
+for how to add one.
+
+## http.py
+
+`fetch_raw()`/`fetch_raw_cached()` — the shared polite-fetch-with-cache
+helper used by every scraper (default 20h cache TTL), so "crawl once daily,
+cache aggressively" is enforced in one place rather than reimplemented per
+source.
 
 ## amnesty.py
 
@@ -14,11 +22,9 @@ resource-type) as custom `<amn:*>` RSS elements — no HTML scraping needed.
 `parse_feed()` is the pure, skip-tolerant parsing function tested against
 the fixture in `tests/fixtures/amnesty/feed_sample.xml` (a malformed item
 is recorded and skipped, not fatal); `parse_events()` is a thin wrapper
-returning just the event list. `fetch_raw_cached()` handles the network
-call with a local on-disk cache (default 20h TTL) per the "crawl once
-daily, cache aggressively" requirement. Run directly with
-`python -m scrapers.amnesty` to fetch, filter, write
-`data/amnesty_events.json`, and print/write a run report.
+returning just the event list. Run directly with `python -m scrapers.amnesty`
+to fetch, filter, write `data/amnesty_events.json`, and print/write a run
+report.
 
 Ingestion is narrowed to resource type `Action`/`Urgent Action` via
 `filter_by_resource_type()` — reports, research briefings, etc. are
@@ -32,6 +38,29 @@ Deliberately out of scope here: determining the perpetrating actor and
 filtering to state-perpetrated violations, which CLAUDE.md assigns to a
 separate LLM classification call (a later pipeline stage). See the module
 docstring and `DECISIONS.md` for the country/region split heuristic.
+
+## hrw.py
+
+Second event source, added specifically because Amnesty's ingestion can't
+reach most of its own Action/Urgent Action content (see above). Two-phase,
+unlike Amnesty's single feed request, because HRW's RSS feed
+(`https://www.hrw.org/rss/news`) carries no country/topic/news-type
+taxonomy — only the article page does. `parse_feed_index()` (pure,
+skip-tolerant) parses the feed into bare index items; `parse_article_page()`
+(pure) parses one article's HTML into a full event, reading the article's
+own `.news-header__flag` (news type) and `.tag-block` sections ("Region /
+Country", "Topic"); `fetch_events()` is the network-touching orchestration
+that does both, tolerating a single article failing to fetch/parse. Tested
+against fixtures in `tests/fixtures/hrw/` (feed + 3 article-page snapshots
+covering News Release, Statement, and an excluded Report). Run directly
+with `python -m scrapers.hrw` to fetch, filter, write
+`data/hrw_events.json`, and print/write a run report.
+
+Narrowed to news type `News Release`/`Statement` via `filter_by_news_type()`
+— see the "Add Human Rights Watch as a second event source" entry in
+`DECISIONS.md` for why those two (and not `Dispatches`/`Commentary`/
+`Letter`, considered and deferred), plus a known nuance where a US
+policy-area label was seen tagged as if it were a country.
 
 ## report.py
 

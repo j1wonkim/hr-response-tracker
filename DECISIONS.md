@@ -286,6 +286,68 @@ is the right approach first.
 
 ---
 
+## 2026-07-17 — Add Human Rights Watch as a second event source
+
+**Decision:** `scrapers/hrw.py` ingests Human Rights Watch news
+(`hrw.org/news`, via the RSS feed at `hrw.org/rss/news`) as a second event
+source alongside Amnesty, not a replacement. Narrowed the same way as
+Amnesty: only news type `News Release` or `Statement` counts as a discrete,
+datable event (`NEWS_TYPE_INCLUDE` in `scrapers/hrw.py`); `Report`,
+`Background Briefing`, `Fact Sheet`, `UPR`, `Journal Article`, etc. are
+excluded for the same reason Amnesty's `Report`/`Research Briefing` are —
+they document ongoing practices, not a single dated incident. `Dispatches`,
+`Commentary`, `Interview`, and `Letter` were considered but left out for
+now: they're each dated and specific-incident-adjacent, but lean editorial/
+advocacy rather than incident reporting, and the maintainer wants to see
+how `News Release`/`Statement` alone performs before widening the filter.
+
+**Rationale:** HRW was evaluated specifically because of the Amnesty
+`/en/documents/` gap logged above. Unlike Amnesty, HRW's discrete-event
+content (`News Release`, `Statement`) is NOT walled off in a separate,
+unreachable content system — it's the same `/news/...` URL space as
+everything else on the site, and a live run against the real feed on
+2026-07-17 confirmed it works end-to-end: 9 of 20 raw feed items passed
+the filter, each with real country/topic tags attached (Libya, Tunisia,
+Uganda, Peru, Bangladesh, etc.) — a working equivalent of what the Amnesty
+resource-type filter was supposed to do but structurally cannot right now.
+
+**Two-phase ingestion, unlike Amnesty's single feed request:** HRW's RSS
+feed carries only title/link/pubDate/guid — no country/topic/news-type
+taxonomy, unlike Amnesty's `<amn:*>` elements. That taxonomy only exists on
+the article page itself, as clean, article-scoped tags (`.news-header__flag`
+for news type, a `.tag-block` labeled "Region / Country" and another labeled
+"Topic" — verified directly against the live site on 2026-07-17, and unlike
+Amnesty's article pages, no cross-content noise from unrelated "related
+articles" widgets was found reusing the same tag classes). So `fetch_events()`
+does one feed request plus one article-page request per item, each cached
+separately (`scrapers/http.py`'s `fetch_raw_cached`, now shared between
+Amnesty and HRW since both need the same polite-fetch-with-cache behavior).
+This is still polite — daily feed volume is small — but it's a structurally
+different, heavier request pattern than Amnesty's one-request design, worth
+knowing about if request volume ever becomes a concern.
+
+**Known nuance — "Region / Country" isn't always a place:** At least one
+live HRW article tagged a US policy-area label ("Immigrants' Rights and
+Border Policy") inside the same "Region / Country" tag-block used for
+actual countries, rather than under "Topic". `REGION_NAMES` in
+`scrapers/hrw.py` only knows to exclude HRW's seven top-level region names
+(Africa, Americas, Asia, Europe/Central Asia, Middle East/North Africa,
+United States, Global); it doesn't yet know to exclude "United States"
+sub-facet labels like this one. Not fixed here — noted so it isn't mistaken
+for a bug later; revisit once more real examples are seen.
+
+**Alternatives considered:** Replacing Amnesty outright was rejected —
+Amnesty's News/Press Release content (even without Urgent Actions) still
+has value as context, and dropping a working, tested scraper wasn't
+warranted just because one specific content type is unreachable. Fetching
+country/topic from the RSS `<description>` field instead of the article
+page was rejected: HRW's feed description is the full article body as raw
+HTML with no separate taxonomy fields, so there was nothing to gain over
+fetching the article page directly, which also gives access to the cleaner
+`.news-header__flag`/`.tag-block` markup.
+
+---
+
 <!--
 Template for new entries:
 

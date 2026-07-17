@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss xmlns:dc="http://purl.org/dc/elements/1.1/" version="2.0" xml:base="https://www.hrw.org/">
+  <channel>
+    <title>Human Rights Watch News</title>
+    <link>https://www.hrw.org/</link>
+    <description/>
+    <language>en</language>
+
+    <item>
+      <title>Libya: ICC Greenlights First Case to Move to Trial</title>
+      <link>https://www.hrw.org/news/2026/07/16/libya-icc-greenlights-first-case-to-move-to-trial</link>
+      <description>(The Hague) - The International Criminal Court...</description>
+      <pubDate>Thu, 16 Jul 2026 18:01:00 -0400</pubDate>
+      <dc:creator>Human Rights Watch</dc:creator>
+      <guid isPermaLink="true">https://www.hrw.org/news/2026/07/16/libya-icc-greenlights-first-case-to-move-to-trial</guid>
+    </item>
+
+    <item>
+      <title>Joint Statement on Sudan Detention Practices</title>
+      <link>https://www.hrw.org/news/2026/07/15/joint-statement-sudan-detention</link>
+      <description>Human rights organizations today issued a joint statement...</description>
+      <pubDate>Wed, 15 Jul 2026 12:00:00 -0400</pubDate>
+      <dc:creator>Human Rights Watch</dc:creator>
+      <guid isPermaLink="true">https://www.hrw.org/news/2026/07/15/joint-statement-sudan-detention</guid>
+    </item>
+
+    <item>
+      <title>Ukraine: Russian-Run Schools Violate Children's Rights</title>
+      <link>https://www.hrw.org/news/2026/07/16/ukraine-russian-run-schools-report</link>
+      <description>A new report documents systematic efforts...</description>
+      <pubDate>Thu, 16 Jul 2026 09:00:00 -0400</pubDate>
+      <dc:creator>Human Rights Watch</dc:creator>
+      <guid isPermaLink="true">https://www.hrw.org/news/2026/07/16/ukraine-russian-run-schools-report</guid>
+    </item>
+
+    <item>
+      <title>Fixture: item with malformed pubDate for skip testing</title>
+      <link>https://www.hrw.org/news/2026/07/16/fixture-bad-date</link>
+      <description>This item exists to test that a malformed pubDate is skipped, not fatal.</description>
+      <pubDate>not-a-real-date</pubDate>
+      <dc:creator>Human Rights Watch</dc:creator>
+      <guid isPermaLink="true">https://www.hrw.org/news/2026/07/16/fixture-bad-date</guid>
+    </item>
+
+  </channel>
+</rss>
