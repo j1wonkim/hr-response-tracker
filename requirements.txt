@@ -1,0 +1,9 @@
+# Pinned dependencies for the pipeline.
+# Add new packages here (with a pinned version) rather than installing
+# ad hoc inside the container, so the image stays reproducible.
+
+requests==2.32.3
+beautifulsoup4==4.12.3
+lxml==5.3.0
+pyyaml==6.0.2
+pytest==8.3.3
