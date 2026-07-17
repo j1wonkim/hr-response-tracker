@@ -6,6 +6,12 @@ how many events came out the other end, what date range they span, how
 they break down by country, and what (if anything) failed to parse. Reused
 by future adapters -- pass any objects exposing `.published_at` (datetime
 or None) and `.countries` (list[str]).
+
+`feed_date_range` (optional) is the raw fetched feed's own date span --
+distinct from `date_range`, which is the *final, filtered* events' span.
+Callers that can cheaply compute it (see scrapers/hrw.py) should pass it
+so cron frequency can be tuned against how far back each feed pull
+actually reaches; see DECISIONS.md, "Redesign HRW crawl reliability".
 """
 
 from __future__ import annotations
@@ -28,6 +34,7 @@ class RunReport:
     skipped_count: int
     skipped: list = field(default_factory=list)
     duplicates_merged: int = 0
+    feed_date_range: dict | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -45,6 +52,12 @@ class RunReport:
             lines.append(f"Date range: {self.date_range['earliest']} to {self.date_range['latest']}")
         else:
             lines.append("Date range: n/a (no dated events)")
+        if self.feed_date_range:
+            lines.append(
+                f"Feed date span: {self.feed_date_range['earliest']} to {self.feed_date_range['latest']}"
+            )
+        else:
+            lines.append("Feed date span: n/a")
         if self.country_counts:
             lines.append("Per-country counts:")
             for country, count in sorted(self.country_counts.items(), key=lambda kv: (-kv[1], kv[0])):
@@ -58,17 +71,27 @@ class RunReport:
         return "\n".join(lines)
 
 
+def compute_date_range(items: list[Any]) -> dict | None:
+    """{'earliest': ..., 'latest': ...} over any objects exposing
+    `.published_at`, or None if none are dated. Shared by build_run_report
+    (for the final event list) and callers computing a raw feed's own
+    date span (see scrapers/hrw.py)."""
+    dated = [getattr(i, "published_at", None) for i in items]
+    dated = [d for d in dated if d is not None]
+    if not dated:
+        return None
+    return {"earliest": min(dated).isoformat(), "latest": max(dated).isoformat()}
+
+
 def build_run_report(
     source: str,
     events: list[Any],
     skipped: list[dict],
     raw_items_seen: int,
     duplicates_merged: int = 0,
+    feed_date_range: dict | None = None,
 ) -> RunReport:
-    dated = [e.published_at for e in events if getattr(e, "published_at", None) is not None]
-    date_range = None
-    if dated:
-        date_range = {"earliest": min(dated).isoformat(), "latest": max(dated).isoformat()}
+    date_range = compute_date_range(events)
 
     counts: Counter = Counter()
     for event in events:
@@ -87,4 +110,5 @@ def build_run_report(
         skipped_count=len(skipped),
         skipped=skipped,
         duplicates_merged=duplicates_merged,
+        feed_date_range=feed_date_range,
     )

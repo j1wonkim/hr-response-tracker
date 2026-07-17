@@ -725,6 +725,8 @@ CLAUDE.md's stage boundaries.
 
 ## 2026-07-17 — Bound initial HRW ingestion with a config-driven ingest_start_date
 
+**Superseded** by [2026-07-17 — Remove ingest_start_date as a post-hoc content filter](#2026-07-17--remove-ingest_start_date-as-a-post-hoc-content-filter) below, same day: walking through this filter's actual runtime behavior on request revealed it never bounded *ingestion* at all (see that entry) — it only discarded already-fetched events after the fact, which a real committed-data dedup mechanism does more honestly. `config/pipeline.yaml` and `scrapers/config.py` are not removed by that entry, though — only this specific field is; see [2026-07-17 — Restore the config system after an over-scoped removal](#2026-07-17--restore-the-config-system-after-an-over-scoped-removal) further below for why the config system itself stayed.
+
 **Decision:** Add `ingest_start_date` to a new `config/pipeline.yaml`
 (loaded via `scrapers/config.py`, not hardcoded), set to `2026-01-01`.
 `scrapers/hrw.py` gets a new `filter_by_start_date()` function that drops
@@ -844,6 +846,50 @@ to treat as a minor tweak.
   classification run), and duplicating that judgment as a heuristic in
   the taxonomy filter would be redundant, brittle, and harder to tune
   than adjusting one prompt.
+
+---
+
+## 2026-07-17 — Redesign HRW crawl reliability: dedupe against committed data, detect coverage gaps, tighten cache TTL
+
+**Context:** asked to walk through what actually happens on a run with `ingest_start_date` set, it became clear that `scrapers/hrw.py` fetches exactly one, un-paginated RSS response per run and has no persistent cursor or cross-run deduplication at all — `ingest_start_date` only filtered *already-fetched* events after the fact, and nothing tracked what had already been ingested versus what a fresh feed pull happened to still contain. That's the actual reliability gap this entry addresses.
+
+**Decision, four parts:**
+1. **Dedupe against `data/events.json`, keyed on URL, in `scrapers/storage.py`.** `load_committed_events()` reads the repo's committed events (empty list on a first run, not an error); `filter_new_events()` drops any freshly fetched event whose URL is already committed. Applied in both `scrapers/hrw.py`'s standalone `__main__` and `scrapers/pipeline.py`'s `run()`, before classification — so a previously-classified event is never reclassified (real Anthropic API cost avoided), not just never re-written to the output file.
+2. **Coverage-overlap check, in `scrapers/coverage.py`.** After every fetch, `check_coverage_overlap()` compares the oldest item in *this run's raw feed* against the newest already-committed event. If the feed's oldest item is newer than our newest stored event, the feed's rolling window has moved past what we last captured — real evidence some events may have gone unseen. `open_coverage_gap_issue()` opens a GitHub issue when that happens, gated on `GITHUB_TOKEN` (a loud skip, not a silent no-op or hard failure, if unset — same pattern as `scrapers/classify.py`'s `MissingCredentialsError`), reading the target repo from `GITHUB_REPOSITORY` (which GitHub Actions sets automatically) rather than hardcoding this project's own repo, so a fork's automated runs file issues on the fork, not here. Skips filing a duplicate if a `coverage-gap`-labeled issue is already open.
+3. **Feed date span in every run report.** `RunReport.feed_date_range` (via `scrapers/report.py`'s new `compute_date_range()` helper) reports the *raw fetched feed's* own date span, separate from `date_range` (the final filtered events' span) — so cron frequency can eventually be tuned against how far back a feed pull actually reaches, rather than guessed at.
+4. **Feed cache TTL: 20h → 4h**, now `hrw.feed_cache_ttl_hours` in `config/pipeline.yaml` (see the following entry for why this stayed config-driven). Since there's no pagination or backward crawl, a shorter cache window is the only lever available to shrink the risk window between "HRW publishes something" and "we notice."
+
+**Known limitation, logged deliberately rather than fixed speculatively:** the coverage check compares against the newest *committed* (i.e. already-classified/passing) event, not a raw log of every URL ever crawled. An event HRW published but that failed classification doesn't count as "coverage" for this check — which biases it toward firing too eagerly rather than staying silent on a real gap, but also means it has not yet fired even once against real data. Treat the underlying risk — a gap between two crawls wider than HRW's feed window — as a known limitation of this design until the check actually fires and that firing is verified against real evidence of a genuine gap, not before.
+
+**Alternatives considered:**
+- **Pursue true pagination/backfill crawling of HRW's site.** Would remove the underlying risk more directly, but HRW's RSS feed has no documented pagination and there's no confirmed API for walking further back; treated as a bigger, riskier lift than warranted without first seeing whether the feed-window risk is real in practice (see the known limitation above).
+- **Persist a raw crawl log (every URL ever seen, independent of classification outcome)** instead of keying the coverage check off `data/events.json`. More precise, but adds a second persistent-state file and a second definition of "known" alongside the committed dataset; deferred until the current design's known limitation actually causes a problem.
+
+---
+
+## 2026-07-17 — Remove ingest_start_date as a post-hoc content filter
+
+**Decision:** `scrapers/hrw.py`'s `filter_by_start_date()` function and its use in both entrypoints are removed entirely, along with the `ingest_start_date` field itself. Dead code, not deprecated code — nothing calls it anymore.
+
+**Rationale:** a walkthrough of this filter's actual runtime behavior (given as a plain explanation, not a design review) showed it never did what its name implied. `scrapers/hrw.py` fetches a single, un-paginated RSS feed response every run; `ingest_start_date` was applied *after* that fetch completed, silently discarding whatever didn't qualify — it never controlled how far back a crawl reached, because there was no crawl to control in that sense. Once the "Redesign HRW crawl reliability" work (above) added a real mechanism for tracking what's already been ingested — deduping against `data/events.json`, keyed on URL, which is what the repo's committed state actually is — an arbitrary date threshold applied after the fact became redundant and, worse, gave a false impression of bounding something it structurally could not bound.
+
+**This is a narrower removal than it might look like.** Only the `ingest_start_date` field, its filter function, and their use are gone. `config/pipeline.yaml` and `scrapers/config.py` — the config system itself — are not part of this decision; see the following entry.
+
+**Alternatives considered:** none beyond keeping it, which was rejected for the reason above — a filter that discards fetched data after the fact isn't a substitute for tracking what's actually been ingested, and keeping both mechanisms side by side would mean two different, occasionally-conflicting definitions of "already covered."
+
+---
+
+## 2026-07-17 — Restore the config system after an over-scoped removal
+
+**Decision:** the removal of `ingest_start_date` (previous entry) was correctly scoped to that one field. Deleting `config/pipeline.yaml`, `scrapers/config.py`, and `tests/test_config.py` *entirely* — done in the same pass, on the reasoning that `ingest_start_date` was config's only value and an empty config module isn't worth keeping — was a mistake, caught and reverted before it was committed. Config over code is a standing hard requirement of this project (CLAUDE.md: "Design every component to be forkable — config over code"), not a feature scoped to one now-removed field, and CLAUDE.md's stage 2 already commits to a config-driven ministry source list landing in this same system later. Restored `config/pipeline.yaml` and `scrapers/config.py` from the commit before their deletion (`git checkout` against the last commit that had them), then removed only `ingest_start_date` from the restored files.
+
+**What replaced the empty space:** rather than leave the config system holding nothing, HRW's feed URL and both cache TTLs — previously a hardcoded `FEED_URL` constant and hardcoded default arguments in `scrapers/hrw.py`'s `fetch_events()` — moved into a new `hrw:` section of `config/pipeline.yaml`, loaded via a new `HRWConfig` dataclass in `scrapers/config.py`. `fetch_events()` now takes `feed_url`, `feed_max_age_hours`, and `article_max_age_hours` as required parameters with no hardcoded defaults; both entrypoints (`scrapers/hrw.py`'s `__main__`, `scrapers/pipeline.py`'s `run()`) load config and pass these through explicitly. This wasn't just filling space — these were exactly the kind of "operational value baked into a scraper" CLAUDE.md's config-over-code principle exists to prevent, and the crawl-reliability work above (feed TTL tuning) made the case for moving them concrete.
+
+**Rationale for logging this at all:** CLAUDE.md's session-hygiene practice is to log decisions, not just outcomes — this one is worth recording specifically *as a mistake and correction*, not folded silently into the entries above, because "config over code" is exactly the kind of standing project-wide principle that's easy to accidentally scope-creep away one field at a time while fixing something else. Future sessions removing a specific config value should default to removing only that value.
+
+**Alternatives considered:**
+- **Leave config.py/pipeline.yaml deleted, reintroduce a config system later when a concrete new value needs it.** Rejected — this is exactly the removal being corrected; "config over code" is a standing requirement independent of which specific value currently lives there.
+- **Restore the deleted files but leave them holding nothing** (empty `PipelineConfig`, empty YAML) until ministry-source config lands. Rejected in favor of giving the system an immediate, real purpose (HRW's feed_url/TTLs) rather than a placeholder nobody would notice was broken until the next feature needed it.
 
 ---
 

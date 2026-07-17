@@ -1,9 +1,16 @@
 # Pipeline-wide settings. Config over code (CLAUDE.md's fork-friendly
 # design goal) -- tune these values here rather than editing scrapers.
+# Ministry source declarations (CLAUDE.md stage 2) will live here too once
+# the adapter interface exists.
 
-# Only ingest events published on or after this date (YYYY-MM-DD). This
-# bounds the *initial backfill* only: events already ingested are never
-# dropped as they age past this date, and this value should not be moved
-# forward over time to "expire" old data. See DECISIONS.md, "Bound
-# initial HRW ingestion with a config-driven ingest_start_date".
-ingest_start_date: "2026-01-01"
+hrw:
+  feed_url: "https://www.hrw.org/rss/news"
+  # How long a cached feed/article fetch is considered fresh before
+  # scrapers/http.py's fetch_raw_cached() re-fetches it. The feed TTL is
+  # short relative to the article TTL because scrapers/hrw.py fetches one
+  # un-paginated feed response per run with no backfill crawl -- a
+  # shorter feed TTL is the main lever that shrinks the window in which
+  # HRW could publish and then roll an item out of the feed between two
+  # crawls. See DECISIONS.md, "Redesign HRW crawl reliability".
+  feed_cache_ttl_hours: 4
+  article_cache_ttl_hours: 168

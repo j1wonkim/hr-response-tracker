@@ -118,6 +118,22 @@ See the "API cost" note in the top-level [README](README.md#running-it-locally)
 before wiring a key into a scheduled run, and never commit a key — `.env`
 and `*.local` are already gitignored for this reason.
 
+`scrapers/coverage.py`'s crawl-coverage-gap alert (see DECISIONS.md,
+"Redesign HRW crawl reliability") optionally uses `GITHUB_TOKEN` to open a
+GitHub issue when the fetched feed no longer overlaps the newest
+committed event:
+
+```bash
+docker run --rm -e GITHUB_TOKEN hr-response-tracker
+```
+
+Without it, a detected gap is printed loudly instead of filed as an
+issue — same graceful-skip pattern as `ANTHROPIC_API_KEY`, so this is
+never required to run the pipeline. The token needs `issues:write` on
+whichever repo `GITHUB_REPOSITORY` points at (set automatically by GitHub
+Actions to the running repo's own `owner/name`, so a fork's automated
+runs file issues on the fork, not on this project's repo).
+
 ## Code style
 
 - Keep scrapers and parsing logic separate from network calls so they're

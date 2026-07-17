@@ -9,34 +9,63 @@ for how to add one.
 ## config.py
 
 `load_pipeline_config()` reads `config/pipeline.yaml` (not hardcoded,
-per CLAUDE.md's config-over-code goal) into a `PipelineConfig` dataclass.
-Currently one setting: `ingest_start_date`, which bounds initial event
-ingestion (see `hrw.py` below and the "Bound initial HRW ingestion with a
-config-driven ingest_start_date" entry in `DECISIONS.md`). Ministry-source
-config will likely live in the same file or a sibling one once the
-adapter interface exists.
+per CLAUDE.md's config-over-code goal — a *hard requirement*, not a
+feature tied to any one setting, see DECISIONS.md's "Restore the config
+system after an over-scoped removal") into a `PipelineConfig` dataclass.
+Currently one section, `hrw:` (an `HRWConfig`): `feed_url`,
+`feed_cache_ttl_hours` (4), and `article_cache_ttl_hours` (168) — see
+`hrw.py` below for why these live in config rather than as hardcoded
+constants/defaults. Ministry-source config (CLAUDE.md stage 2) will live
+in the same file, likely a new top-level section, once the adapter
+interface exists.
 
 ## http.py
 
 `fetch_raw()`/`fetch_raw_cached()` — the shared polite-fetch-with-cache
-helper used by every scraper (default 20h cache TTL), so "crawl once daily,
+helper used by every scraper (default 20h cache TTL, overridable per
+call — `hrw.py` overrides it via config, see below), so "crawl once daily,
 cache aggressively" is enforced in one place rather than reimplemented per
 source.
 
 ## hrw.py
 
-The event-ingestion source. Two-phase, because HRW's RSS feed
-(`https://www.hrw.org/rss/news`) carries no country/topic/news-type
-taxonomy — only the article page does. `parse_feed_index()` (pure,
-skip-tolerant) parses the feed into bare index items; `parse_article_page()`
-(pure) parses one article's HTML into a full event, reading the article's
-own `.news-header__flag` (news type) and `.tag-block` sections ("Region /
+The event-ingestion source. Two-phase, because HRW's RSS feed (URL is
+config-driven — `config/pipeline.yaml`'s `hrw.feed_url`, currently
+`hrw.org/rss/news`) carries no country/topic/news-type taxonomy — only the
+article page does. `parse_feed_index()` (pure, skip-tolerant) parses the
+feed into bare index items; `parse_article_page()` (pure) parses one
+article's HTML into a full event, reading the article's own
+`.news-header__flag` (news type) and `.tag-block` sections ("Region /
 Country", "Topic"); `fetch_events()` is the network-touching orchestration
-that does both, tolerating a single article failing to fetch/parse. Tested
-against fixtures in `tests/fixtures/hrw/` (feed + 4 article-page snapshots
-covering News Release, Statement, Dispatches, and an excluded Report). Run
-directly with `python -m scrapers.hrw` to fetch, filter, write
-`data/hrw_events.json`, and print/write a run report.
+that does both, tolerating a single article failing to fetch/parse, and
+takes `feed_url`/`feed_max_age_hours`/`article_max_age_hours` as required
+parameters (no hardcoded defaults — always supplied from config by both
+entrypoints). Tested against fixtures in `tests/fixtures/hrw/` (feed + 4
+article-page snapshots covering News Release, Statement, Dispatches, and
+an excluded Report). Run directly with `python -m scrapers.hrw` to fetch,
+filter, write `data/hrw_events.json`, and print/write a run report.
+
+**Crawl reliability (2026-07-17 redesign — see DECISIONS.md, "Redesign
+HRW crawl reliability").** `fetch_events()` fetches exactly one,
+un-paginated feed response per run; there is no backward crawl and no
+persistent cursor within this module. Instead: each run is deduped
+against already-committed events in `data/events.json` (keyed on URL, via
+`scrapers/storage.py`) before any further processing, both `hrw.py`'s
+standalone `__main__` and `scrapers/pipeline.py`'s `run()` do this, and it
+avoids redundant classification spend, not just duplicate output rows.
+After every fetch, `scrapers/coverage.py`'s `check_coverage_overlap()`
+compares this run's oldest raw feed item against the newest committed
+event; if the feed's window no longer reaches back far enough to overlap,
+`open_coverage_gap_issue()` opens a GitHub issue (gated on `GITHUB_TOKEN`,
+skipped loudly rather than failing if unset; reads the target repo from
+`GITHUB_REPOSITORY` so a fork's own automated runs stay fork-safe; skips
+filing a duplicate if one's already open). The feed's cache TTL dropped
+from 20h to 4h (`config/pipeline.yaml`'s `hrw.feed_cache_ttl_hours`) as
+the main lever available to shrink the risk window, since there's no
+pagination to fall back on. `FetchResult.index_items` exposes the raw
+feed's index (pre-filtering) so both the coverage check and the run
+report's new `feed_date_range` field (see `report.py` below) can see the
+feed's actual date span, not just the final filtered events' span.
 
 Narrowed to news type `News Release`/`Statement`/`Dispatches` via
 `filter_by_news_type()` — see the "Add Human Rights Watch as a second
@@ -58,16 +87,6 @@ announcement regardless of its news-type tag. See the "Widen HRW's
 taxonomy filter to include Dispatches" entry in `DECISIONS.md` for why
 this two-layer split (taxonomy filter + LLM incident check) is deliberate,
 not a gap.
-
-Also narrowed by `filter_by_start_date()` to `config/pipeline.yaml`'s
-`ingest_start_date` (2026-01-01) — events published before it are dropped
-at ingestion time. This bounds the initial backfill only, not retention:
-events already ingested are never dropped as they age past this date. See
-the "Bound initial HRW ingestion with a config-driven ingest_start_date"
-entry in `DECISIONS.md` for the full rationale (in short: response coding
-depends on a 30-day observation window, so ingesting an event without
-enough runway before launch would misrepresent silence as an observed
-`no_response`).
 
 Amnesty (`scrapers/amnesty.py`) was the original event source and has been
 removed from the codebase — its Action/Urgent Action content lives almost
@@ -93,6 +112,41 @@ merged-away events aren't discarded, they're recorded in `groups` (a
 "Cross-source event deduplication" entry in `DECISIONS.md` for the
 thresholds' rationale and known limitations (greedy clustering, not full
 transitive closure).
+
+## storage.py
+
+Reads the repo's committed state — `data/events.json` — not the local,
+gitignored `.cache/` directory, which is disposable scratch space, not a
+record of what's been ingested. `load_committed_events()` returns `[]` on
+a first run (file doesn't exist yet, not an error); `load_known_urls()`
+extracts just the URL set; `filter_new_events()` drops any freshly
+fetched event whose URL is already committed. Used by both `hrw.py`'s
+standalone `__main__` and `pipeline.py`'s `run()`, before deduplication
+and classification — so a previously-classified event is never
+reclassified, not just never re-written to output. See DECISIONS.md,
+"Redesign HRW crawl reliability."
+
+## coverage.py
+
+A crawl-coverage overlap check, added because `hrw.py` fetches one
+un-paginated feed response per run with no backward crawl — the only
+thing standing between "daily crawl" and "silently missed events" is
+HRW's feed staying wide enough to overlap with the last successful crawl.
+`check_coverage_overlap()` (pure) compares this run's oldest raw feed
+item against the newest already-committed event; if the feed's window no
+longer reaches that far back, `gap_detected` is `True`.
+`open_coverage_gap_issue()` opens a GitHub issue when a gap is detected,
+gated on `GITHUB_TOKEN` (a loud skip, not a silent no-op or hard failure,
+mirroring `classify.py`'s `MissingCredentialsError` pattern), reading the
+target repo from `GITHUB_REPOSITORY` (set automatically by GitHub
+Actions) rather than hardcoding this project's repo, so a fork's own runs
+file issues on the fork. Skips filing a duplicate if a `coverage-gap`-
+labeled issue is already open. **Known limitation, logged deliberately**:
+this compares against the newest *committed* (already-classified) event,
+not a raw log of every URL ever crawled, so it has not yet fired against
+real data — see DECISIONS.md, "Redesign HRW crawl reliability" for the
+full reasoning and what would need to be true for it to actually catch a
+real gap.
 
 ## classify.py
 
@@ -160,9 +214,11 @@ board).
 
 ## pipeline.py
 
-The entrypoint: runs HRW ingestion, applies the news-type filter,
-deduplicates, classifies (if a credential is available), and writes
-`data/events.json` plus a run report. Run directly with
+The entrypoint: loads config, runs HRW ingestion, applies the news-type
+filter, dedupes against `data/events.json` (`storage.py`), deduplicates
+near-duplicates within the batch (`dedup.py`), classifies (if a
+credential is available), writes `data/events.json` plus a run report,
+and runs the coverage-gap check (`coverage.py`). Run directly with
 `python -m scrapers.pipeline`; `scrapers/hrw.py` can still be run standalone
 for debugging ingestion in isolation from classification.
 
@@ -170,10 +226,15 @@ for debugging ingestion in isolation from classification.
 
 `build_run_report()` produces the small end-of-run report every pipeline
 stage generates (events found, date range covered, per-country counts,
-skipped/unparseable items, duplicates merged) — see the "Run reports" hard
+skipped/unparseable items, duplicates merged, and — when a caller supplies
+it — the raw feed's own date span) — see the "Run reports" hard
 requirement in `CLAUDE.md`. Source-agnostic: it duck-types on
 `.published_at` and `.countries` attributes, so future ministry adapters
 can reuse it directly rather than inventing a per-adapter report format.
+`compute_date_range()` is the shared min/max-date helper, used both
+internally and by `hrw.py`/`pipeline.py` to compute `feed_date_range`
+(the fetched feed's span, distinct from the final filtered events' span)
+— see DECISIONS.md, "Redesign HRW crawl reliability."
 
 More ministry-side adapters (US State Dept, China MFA, etc.) land here
 next, behind a shared adapter interface extracted once there's a second

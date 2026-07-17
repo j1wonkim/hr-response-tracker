@@ -5,8 +5,9 @@ reach almost none of Amnesty's own Action/Urgent Action content (see
 DECISIONS.md, 2026-07-16). HRW has no equivalent gap: everything is one
 content system, reachable in two polite requests per new item.
 
-Two-phase ingestion, because HRW's RSS feed (https://www.hrw.org/rss/news)
-carries only title/link/pubDate/guid -- no country/topic/news-type taxonomy,
+Two-phase ingestion, because HRW's RSS feed (URL is config-driven -- see
+config/pipeline.yaml's hrw.feed_url, currently hrw.org/rss/news) carries
+only title/link/pubDate/guid -- no country/topic/news-type taxonomy,
 unlike Amnesty's feed. That taxonomy only exists on the article page itself
 (as clean, article-scoped tags -- verified against the live site on
 2026-07-16, no cross-content noise the way Amnesty's article pages had):
@@ -28,6 +29,19 @@ distinguish content format -- a documentary-premiere announcement can
 still be tagged "News Release" and pass through here. Excluding that kind
 of item is scrapers/classify.py's job (the discrete-incident check), not
 this filter's.
+
+fetch_events() fetches exactly one, un-paginated feed response per run --
+there is no crawl-backward-until-some-date logic here, and no persistent
+cursor. What's already been ingested is tracked externally, against the
+committed data/events.json (scrapers/storage.py), not against anything in
+this module. Because a single feed pull is the entire crawl, the only
+real defense against silently missing events between two runs is (a) a
+short feed-cache TTL (config-driven -- see config/pipeline.yaml's
+hrw.feed_cache_ttl_hours) and (b) the coverage-overlap check in
+scrapers/coverage.py, run after every fetch to confirm this run's feed
+still reaches back to the last committed event. See DECISIONS.md,
+"Redesign HRW crawl reliability" for the full design and its known
+limitations, and scrapers/config.py for how feed_url/TTLs are loaded.
 """
 
 from __future__ import annotations
@@ -36,15 +50,13 @@ import json
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import datetime
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 from bs4 import BeautifulSoup
 
 from scrapers.http import fetch_raw_cached
-
-FEED_URL = "https://www.hrw.org/rss/news"
 
 # HRW's own top-level region groupings, as observed in the /news filter
 # facets on 2026-07-16. A "Region / Country" tag matching one of these is a
@@ -207,18 +219,31 @@ class FetchResult:
     events: list[HRWEvent]
     skipped: list[dict]
     raw_items_seen: int
+    index_items: list[IndexItem]
 
 
 def fetch_events(
     cache_dir: Path,
-    feed_max_age_hours: float = 20,
-    article_max_age_hours: float = 24 * 7,
+    feed_url: str,
+    feed_max_age_hours: float,
+    article_max_age_hours: float,
 ) -> FetchResult:
     """Network-touching orchestration: fetch the feed, then fetch+parse each
     item's article page. A single article failing to fetch/parse is
-    recorded as skipped, not fatal to the run."""
+    recorded as skipped, not fatal to the run.
+
+    feed_url and both TTLs are required, not defaulted here -- they're
+    config-driven (see scrapers/config.py, config/pipeline.yaml's `hrw:`
+    section), not hardcoded in this module. The feed TTL matters
+    specifically because this scraper fetches one un-paginated feed
+    response and never re-walks further back -- a shorter cache window is
+    the main lever that shrinks the risk window in which HRW could publish
+    and then roll an item out of the feed between two crawls. index_items
+    is exposed on the result (not just the constructed events) so callers
+    can compute the *raw feed's* date span for the coverage-gap check and
+    run report, before any filtering narrows it down."""
     index = parse_feed_index(
-        fetch_raw_cached(cache_dir / "feed.xml", url=FEED_URL, max_age_hours=feed_max_age_hours)
+        fetch_raw_cached(cache_dir / "feed.xml", url=feed_url, max_age_hours=feed_max_age_hours)
     )
     events: list[HRWEvent] = []
     skipped: list[dict] = list(index.skipped)
@@ -235,7 +260,7 @@ def fetch_events(
         except Exception as exc:
             skipped.append({"source": "hrw", "title": item.title or None, "guid": item.guid or None, "reason": f"{type(exc).__name__}: {exc}"})
 
-    return FetchResult(events=events, skipped=skipped, raw_items_seen=index.raw_items_seen)
+    return FetchResult(events=events, skipped=skipped, raw_items_seen=index.raw_items_seen, index_items=index.items)
 
 
 def filter_by_news_type(events: list[HRWEvent], include: set[str] = NEWS_TYPE_INCLUDE) -> list[HRWEvent]:
@@ -243,25 +268,24 @@ def filter_by_news_type(events: list[HRWEvent], include: set[str] = NEWS_TYPE_IN
     return [e for e in events if e.news_type in include]
 
 
-def filter_by_start_date(events: list[HRWEvent], start_date: date) -> list[HRWEvent]:
-    """Keep only events published on or after start_date. Bounds *initial
-    ingestion* only -- this is not a retention policy, and events already
-    ingested before this filter existed (or from a prior config value) are
-    never re-checked or dropped by re-running it. Events with no known
-    published_at are excluded rather than assumed in-range, since there's
-    nothing to compare. See DECISIONS.md, "Bound initial HRW ingestion
-    with a config-driven ingest_start_date"."""
-    return [e for e in events if e.published_at is not None and e.published_at.date() >= start_date]
-
-
 if __name__ == "__main__":
     from scrapers.config import load_pipeline_config
-    from scrapers.report import build_run_report
+    from scrapers.coverage import check_coverage_overlap, open_coverage_gap_issue
+    from scrapers.report import build_run_report, compute_date_range
+    from scrapers.storage import filter_new_events, load_committed_events
 
     config = load_pipeline_config()
-    result = fetch_events(Path(".cache/hrw"))
+    result = fetch_events(
+        Path(".cache/hrw"),
+        feed_url=config.hrw.feed_url,
+        feed_max_age_hours=config.hrw.feed_cache_ttl_hours,
+        article_max_age_hours=config.hrw.article_cache_ttl_hours,
+    )
     events = filter_by_news_type(result.events)
-    events = filter_by_start_date(events, config.ingest_start_date)
+
+    committed_events = load_committed_events()
+    known_urls = {e["url"] for e in committed_events if e.get("url")}
+    events = filter_new_events(events, known_urls)
 
     out_path = Path("data/hrw_events.json")
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -273,14 +297,22 @@ if __name__ == "__main__":
 
     report = build_run_report(
         source=(
-            "scrapers.hrw (news_type in News Release, Statement; "
-            f"ingest_start_date={config.ingest_start_date.isoformat()})"
+            "scrapers.hrw (news_type in News Release, Statement, Dispatches; "
+            "deduped against data/events.json)"
         ),
         events=events,
         skipped=result.skipped,
         raw_items_seen=result.raw_items_seen,
+        feed_date_range=compute_date_range(result.index_items),
     )
     report_path = Path("data/hrw_run_report.json")
     report_path.write_text(json.dumps(report.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8")
     print()
     print(report.summary_text())
+
+    coverage_result = check_coverage_overlap(result.index_items, committed_events)
+    print()
+    print(coverage_result.message)
+    issue_url = open_coverage_gap_issue(coverage_result)
+    if issue_url:
+        print(f"Opened coverage-gap issue: {issue_url}")

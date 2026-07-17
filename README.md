@@ -120,6 +120,22 @@ feed items. This taxonomy filter doesn't screen out multimedia-format
 content (HRW tags a documentary premiere the same as a real incident
 report) — that's caught downstream by the classification stage's
 discrete-incident check instead, by design; see `DECISIONS.md`.
+
+**Crawl reliability.** `scrapers/hrw.py` fetches one un-paginated feed
+response per run — there's no backward crawl. Instead, each run is
+deduped against `data/events.json` (the repo's committed state, keyed on
+URL, via `scrapers/storage.py`) before classification, both to avoid
+duplicate rows and to avoid re-paying for classification on an
+already-classified event. `scrapers/coverage.py` checks after every run
+whether the fetched feed still overlaps the newest committed event, and
+opens a GitHub issue if it doesn't (optional `GITHUB_TOKEN`; skipped
+loudly, not silently, if unset — same pattern as `ANTHROPIC_API_KEY`).
+The feed's cache TTL is 4 hours, the main lever available to shrink the
+risk window given there's no pagination. HRW's feed URL and both cache
+TTLs are config-driven (`config/pipeline.yaml`'s `hrw:` section via
+`scrapers/config.py`), not hardcoded. See `DECISIONS.md`, "Redesign HRW
+crawl reliability" for the full design and its known limitations.
+
 `scrapers/dedup.py` merges events reported more than once for
 the same real-world incident (heuristic: shared country + title similarity
 + a 3-day window — not LLM-verified, see `DECISIONS.md`). `scrapers/classify.py`
