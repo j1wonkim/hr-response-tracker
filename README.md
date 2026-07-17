@@ -89,12 +89,12 @@ commercially, with attribution.
 
 If you use this dataset, please cite it:
 
-> Jiwon. (2026). *Human Rights Response Tracker* [Data set]. GitHub.
+> Kim, Jiwon. (2026). *Human Rights Response Tracker* [Data set]. GitHub.
 > https://github.com/j1wonkim/hr-response-tracker
 
 ```bibtex
 @misc{hr_response_tracker,
-  author       = {Jiwon},
+  author       = {Kim, Jiwon},
   title        = {Human Rights Response Tracker},
   year         = {2026},
   publisher    = {GitHub},
