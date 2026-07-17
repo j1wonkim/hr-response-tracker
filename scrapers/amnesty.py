@@ -17,6 +17,16 @@ this module splits them using a small hardcoded list of Amnesty's known
 region/subregion names (REGION_NAMES below), derived from the site's own
 taxonomy as observed on 2026-07-16. Extend that list if Amnesty adds new
 regions.
+
+Ingestion is narrowed to resource-type "Action" or "Urgent Action" (see
+RESOURCE_TYPE_INCLUDE and filter_by_resource_type) -- see DECISIONS.md for
+the rationale. IMPORTANT CAVEAT, also logged in DECISIONS.md: this RSS feed
+rarely carries either tag. Verified against the live site on 2026-07-16 --
+the vast majority of Amnesty's Action/Urgent Action content (24,000+ items)
+lives at /en/documents/... URLs, a separate content system not exposed via
+this feed, the public REST API, or the XML sitemap. Applying the filter here
+is correct but will yield close to zero events until a source that actually
+reaches /en/documents/ content is added.
 """
 
 from __future__ import annotations
@@ -68,6 +78,12 @@ REGION_NAMES = {
     "Eastern Europe and Central Asia",
     "North Africa",
 }
+
+# Only these resource types represent discrete, datable events (a specific
+# action or urgent action tied to a specific case) -- see DECISIONS.md.
+# Excludes Research, Report, Annual Report, Position, etc., which document
+# ongoing multi-year practices rather than a single dated event.
+RESOURCE_TYPE_INCLUDE = {"Action", "Urgent Action"}
 
 _WP_EXCERPT_BOILERPLATE = re.compile(r"appeared first on", re.IGNORECASE)
 
@@ -150,11 +166,47 @@ def _parse_item(item: ET.Element) -> AmnestyEvent:
     )
 
 
-def parse_events(raw_xml: str) -> list[AmnestyEvent]:
-    """Pure parsing function -- takes raw RSS XML, returns events. No network
-    calls, so it's the function fixture-based tests exercise."""
+@dataclass
+class ParseResult:
+    events: list[AmnestyEvent]
+    skipped: list[dict]
+    raw_items_seen: int
+
+
+def parse_feed(raw_xml: str) -> ParseResult:
+    """Pure parsing function -- takes raw RSS XML, returns every event plus
+    a record of any <item> that failed to parse (e.g. a malformed pubDate),
+    so a single bad item doesn't take down the whole run. No network calls,
+    so it's the function fixture-based tests exercise."""
     root = ET.fromstring(raw_xml)
-    return [_parse_item(item) for item in root.findall(".//item")]
+    items = root.findall(".//item")
+    events: list[AmnestyEvent] = []
+    skipped: list[dict] = []
+    for item in items:
+        try:
+            events.append(_parse_item(item))
+        except Exception as exc:
+            skipped.append(
+                {
+                    "title": (item.findtext("title") or "").strip() or None,
+                    "guid": (item.findtext("guid") or item.findtext("link") or "").strip() or None,
+                    "reason": f"{type(exc).__name__}: {exc}",
+                }
+            )
+    return ParseResult(events=events, skipped=skipped, raw_items_seen=len(items))
+
+
+def parse_events(raw_xml: str) -> list[AmnestyEvent]:
+    """Convenience wrapper over parse_feed() for callers that don't need
+    skip-tracking (e.g. tests exercising individual event fields)."""
+    return parse_feed(raw_xml).events
+
+
+def filter_by_resource_type(
+    events: list[AmnestyEvent], include: set[str] = RESOURCE_TYPE_INCLUDE
+) -> list[AmnestyEvent]:
+    """Keep only events tagged with one of the given resource types."""
+    return [e for e in events if set(e.resource_types) & include]
 
 
 def fetch_raw(url: str = FEED_URL, timeout: int = 15, user_agent: str = DEFAULT_USER_AGENT) -> str:
@@ -184,7 +236,11 @@ def fetch_raw_cached(
 
 
 if __name__ == "__main__":
-    events = parse_events(fetch_raw_cached(Path(".cache/amnesty_feed.xml")))
+    from scrapers.report import build_run_report
+
+    result = parse_feed(fetch_raw_cached(Path(".cache/amnesty_feed.xml")))
+    events = filter_by_resource_type(result.events)
+
     out_path = Path("data/amnesty_events.json")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(
@@ -192,3 +248,16 @@ if __name__ == "__main__":
         encoding="utf-8",
     )
     print(f"Wrote {len(events)} events to {out_path}")
+
+    report = build_run_report(
+        source="scrapers.amnesty (resource_type in Action, Urgent Action)",
+        events=events,
+        skipped=result.skipped,
+        raw_items_seen=result.raw_items_seen,
+    )
+    report_path = Path("data/amnesty_run_report.json")
+    report_path.write_text(
+        json.dumps(report.to_dict(), indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+    print()
+    print(report.summary_text())

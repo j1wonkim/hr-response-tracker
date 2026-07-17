@@ -2,19 +2,28 @@ from pathlib import Path
 
 import pytest
 
-from scrapers.amnesty import REGION_NAMES, clean_html, parse_events
+from scrapers.amnesty import (
+    REGION_NAMES,
+    RESOURCE_TYPE_INCLUDE,
+    clean_html,
+    filter_by_resource_type,
+    parse_events,
+    parse_feed,
+)
+from scrapers.report import build_run_report
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "amnesty" / "feed_sample.xml"
+RAW_XML = FIXTURE_PATH.read_text(encoding="utf-8")
 
 
 @pytest.fixture
 def events():
-    raw_xml = FIXTURE_PATH.read_text(encoding="utf-8")
-    return parse_events(raw_xml)
+    return parse_events(RAW_XML)
 
 
-def test_parses_all_items(events):
-    assert len(events) == 5
+def test_parses_all_well_formed_items(events):
+    # 7 items in the fixture, 1 has a malformed pubDate and is skipped
+    assert len(events) == 6
 
 
 def test_basic_fields(events):
@@ -106,3 +115,56 @@ def test_parse_events_empty_feed():
         '<rss version="2.0"><channel><title>Empty</title></channel></rss>'
     )
     assert parse_events(empty_rss) == []
+
+
+def test_parse_feed_skips_malformed_item_instead_of_raising():
+    result = parse_feed(RAW_XML)
+    assert result.raw_items_seen == 7
+    assert len(result.events) == 6
+    assert len(result.skipped) == 1
+    skipped = result.skipped[0]
+    assert skipped["title"] == "Fixture: item with malformed pubDate for skip testing"
+    assert "pubDate" not in skipped["reason"]  # sanity: reason is the exception, not a literal
+    assert skipped["reason"]  # non-empty
+
+
+def test_filter_by_resource_type_keeps_only_action_and_urgent_action(events):
+    filtered = filter_by_resource_type(events)
+    assert len(filtered) == 1
+    assert filtered[0].title.startswith("Egypt: Further Information")
+    assert set(filtered[0].resource_types) & RESOURCE_TYPE_INCLUDE
+
+
+def test_filter_by_resource_type_excludes_press_release_and_untagged(events):
+    filtered = filter_by_resource_type(events)
+    titles = {e.title for e in filtered}
+    assert not any("El Salvador" in t for t in titles)  # Press Release
+    assert not any("Myanmar" in t for t in titles)  # no resource-types at all
+
+
+def test_build_run_report_counts_and_date_range(events):
+    filtered = filter_by_resource_type(events)
+    report = build_run_report(
+        source="test",
+        events=filtered,
+        skipped=[{"title": "x", "guid": None, "reason": "boom"}],
+        raw_items_seen=7,
+    )
+    assert report.events_found == 1
+    assert report.raw_items_seen == 7
+    assert report.skipped_count == 1
+    assert report.country_counts == {"Egypt": 1}
+    assert report.date_range == {
+        "earliest": filtered[0].published_at.isoformat(),
+        "latest": filtered[0].published_at.isoformat(),
+    }
+    # events_found + skipped + excluded_by_filter should account for every raw item
+    assert report.events_found + report.skipped_count + report.excluded_by_filter == 7
+
+
+def test_build_run_report_handles_no_events():
+    report = build_run_report(source="test", events=[], skipped=[], raw_items_seen=0)
+    assert report.events_found == 0
+    assert report.date_range is None
+    assert report.country_counts == {}
+    assert "Date range: n/a" in report.summary_text()

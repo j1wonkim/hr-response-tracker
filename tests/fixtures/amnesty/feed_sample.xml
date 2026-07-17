@@ -159,5 +159,45 @@
 ]]></description>
 	</item>
 
+	<item>
+		<title>Egypt: Further Information: Health of unjustly jailed activist at risk: Mohamed Adel</title>
+		<link>https://www.amnesty.org/en/documents/mde12/0001/2026/en/</link>
+		<dc:creator><![CDATA[Amnesty International]]></dc:creator>
+		<pubDate>Mon, 13 Jul 2026 10:00:00 +0000</pubDate>
+		<amn:content-types>
+			<amn:id name="Campaigns">2133</amn:id>
+		</amn:content-types>
+		<amn:countries>
+			<amn:id name="Egypt">1786</amn:id>
+			<amn:id name="Middle East and North Africa">1701</amn:id>
+		</amn:countries>
+		<amn:topics>
+			<amn:id name="Prisoners of Conscience">2079</amn:id>
+		</amn:topics>
+		<amn:resource-types>
+			<amn:id name="Urgent Action">2148</amn:id>
+		</amn:resource-types>
+		<guid isPermaLink="false">https://www.amnesty.org/en/?p=888888</guid>
+		<description><![CDATA[<p>Amnesty International is concerned about the health of Mohamed Adel. [&#8230;]</p>
+<p>The post <a href="https://www.amnesty.org/en/documents/mde12/0001/2026/en/">Egypt: Further Information: Health of unjustly jailed activist at risk: Mohamed Adel</a> appeared first on <a href="https://www.amnesty.org/en">Amnesty International</a>.</p>
+]]></description>
+	</item>
+
+	<item>
+		<title>Fixture: item with malformed pubDate for skip testing</title>
+		<link>https://www.amnesty.org/en/latest/news/2026/07/fixture-bad-date/</link>
+		<dc:creator><![CDATA[Amnesty International]]></dc:creator>
+		<pubDate>not-a-real-date</pubDate>
+		<amn:content-types>
+			<amn:id name="News">1148</amn:id>
+		</amn:content-types>
+		<amn:resource-types>
+			<amn:id name="Report">2146</amn:id>
+		</amn:resource-types>
+		<guid isPermaLink="false">https://www.amnesty.org/en/?p=777777</guid>
+		<description><![CDATA[<p>This item exists to test that a malformed pubDate is skipped, not fatal.</p>
+]]></description>
+	</item>
+
 </channel>
 </rss>

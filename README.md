@@ -79,10 +79,17 @@ against fixtures, and how to add a new source.
 Slice 1 is done: `scrapers/amnesty.py` fetches and parses Amnesty
 International's RSS feed into structured events (date, title, url,
 country/region tags, summary/body text), tested against a fixture in
-`tests/fixtures/amnesty/`. It does not yet determine the perpetrating actor
-or filter to state-perpetrated violations — that's a separate LLM
-classification call, still to come. No ministry-side scraping, linking,
-classification, automation, or visualization yet. Build order and
+`tests/fixtures/amnesty/`, and narrows to `Action`/`Urgent Action` items via
+`filter_by_resource_type()`. **That filter currently yields close to zero
+events** — most `Action`/`Urgent Action` content lives at
+`amnesty.org/en/documents/...`, which isn't reachable from the RSS feed,
+REST API, or sitemap (see `DECISIONS.md`); a different ingestion path is
+needed and not yet built. Every run ends with a small report (events found,
+date range, per-country counts, skipped items) via `scrapers/report.py`. It
+does not yet determine the perpetrating actor or filter to
+state-perpetrated violations — that's a separate LLM classification call,
+still to come. No ministry-side scraping, linking, classification,
+automation, or visualization yet. Build order and
 architecture are documented in `CLAUDE.md`.
 
 ## Data & citation

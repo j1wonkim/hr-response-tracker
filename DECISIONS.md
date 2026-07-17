@@ -234,6 +234,58 @@ country/region classification from scratch.
 
 ---
 
+## 2026-07-16 — Narrow ingestion to Action / Urgent Action resource types
+
+**Decision:** Amnesty ingestion is narrowed to items tagged with resource
+type `Action` or `Urgent Action` (`RESOURCE_TYPE_INCLUDE` in
+`scrapers/amnesty.py`, applied via `filter_by_resource_type()`). Everything
+else — `Report`, `Research Briefing`, `Annual Report`, `Position`, `Blog
+Post`, `Public Statement`, `Governance`, etc. — is excluded from the event
+set, even though it's still visible on `amnesty.org/en/latest/`.
+
+**Rationale:** Reports, research briefings, and similar resource types
+document ongoing, multi-year practices — not a discrete, datable event. They
+don't fit a real-time response tracker: there's no single date a foreign
+ministry could plausibly be "responding to," and forcing them into the
+30-day linking window (see the "Response window shortened to 30 days"
+entry above) would produce meaningless `no_response` counts. Actions and Urgent Actions,
+by contrast, are each tied to a specific case with a specific publication
+date, which is exactly what the event–statement linking stage needs.
+
+**Known limitation — the current RSS source barely reaches this content:**
+Verified directly against the live site on 2026-07-16. Amnesty's
+`Action`/`Urgent Action` content (24,000+ items site-wide, confirmed via
+`/en/wp-json/wp/v2/resourceType`) lives almost entirely at
+`amnesty.org/en/documents/...` URLs — a separate content system from the
+`/en/latest/news/` posts this scraper's RSS feed (`/en/feed/`) covers. That
+system has no dedicated RSS feed (`/en/documents/feed/` 404s), isn't
+exposed through the public REST API (`/en/wp-json/wp/v2/types` lists no
+`documents` collection; querying `/wp/v2/posts?resourceType=<urgent-action-id>`
+returns only 1 cross-tagged item), and isn't in the XML sitemap. It's only
+browsable through the `/en/latest/` filtered search UI, which is backed by
+a third-party enterprise search widget (an exposed client-side API key,
+product tag `PRO_MULTISITE`) rather than a stable, documented, scrapeable
+endpoint. Running `filter_by_resource_type()` against the current feed is
+correct but currently yields close to zero events (confirmed: 0 of 12 items
+in a live run) — the filter isn't broken, the source just can't reach most
+of what it's supposed to select. **A different ingestion path for
+`/en/documents/` content is a prerequisite for this filter to do real work**
+and is not yet built; flagged to the maintainer rather than silently
+shipping a scraper that always returns ~nothing.
+
+**Alternatives considered:** Keeping all resource types and letting Stage 4
+issue classification or Stage 3 linking implicitly filter them out was
+rejected — it would silently let non-event content pollute the response
+matrix rather than being excluded by an explicit, logged rule. Reverse-
+engineering the third-party search widget's API to reach `/en/documents/`
+content now was considered and rejected for this slice: it's undocumented,
+the exposed API key appears scoped to the widget rather than general
+programmatic use, and building a scraper around an unfamiliar private
+endpoint is a bigger, riskier lift than warranted without confirming this
+is the right approach first.
+
+---
+
 <!--
 Template for new entries:
 

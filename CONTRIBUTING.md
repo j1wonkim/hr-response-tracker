@@ -32,11 +32,17 @@ source. The pipeline is designed so this requires minimal code:
    of the source under `tests/fixtures/<source-name>/` and write a test that
    parses the fixture. Parsers must never hit live sites in tests — see
    "Polite scraping" below and in CLAUDE.md.
-5. **Respect robots.txt and rate limits.** The pipeline crawls once daily.
+5. **Generate a run report.** End your adapter's run with a small report —
+   events found, date range covered, per-country counts, and any
+   skipped/unparseable items. Reuse `scrapers/report.py`'s
+   `build_run_report()` (it duck-types on `.published_at`/`.countries`,
+   so it works for any adapter's event objects) rather than inventing a new
+   format; see `scrapers/amnesty.py`'s `__main__` block for the pattern.
+6. **Respect robots.txt and rate limits.** The pipeline crawls once daily.
    New adapters must not introduce aggressive polling. Some sources (e.g.
    China MFA) are known to block or throttle aggressive crawlers — cache
    responses and back off appropriately.
-6. **Open a PR** with: the adapter/config, its fixture-based test(s), and a
+7. **Open a PR** with: the adapter/config, its fixture-based test(s), and a
    one-paragraph note on the source (official spokesperson transcripts vs.
    press releases vs. social media, language, update cadence).
 
