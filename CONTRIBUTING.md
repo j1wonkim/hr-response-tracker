@@ -37,7 +37,9 @@ source. The pipeline is designed so this requires minimal code:
    skipped/unparseable items. Reuse `scrapers/report.py`'s
    `build_run_report()` (it duck-types on `.published_at`/`.countries`,
    so it works for any adapter's event objects) rather than inventing a new
-   format; see `scrapers/amnesty.py`'s `__main__` block for the pattern.
+   format; see `scrapers/amnesty.py`'s or `scrapers/hrw.py`'s `__main__`
+   block for the single-source pattern, or `scrapers/pipeline.py` for how
+   multiple sources are combined, deduplicated, and reported on together.
 6. **Respect robots.txt and rate limits.** The pipeline crawls once daily.
    New adapters must not introduce aggressive polling. Some sources (e.g.
    China MFA) are known to block or throttle aggressive crawlers — cache
@@ -58,7 +60,7 @@ source. The pipeline is designed so this requires minimal code:
   files in `prompts/`. If you're proposing a prompt wording change, include
   before/after examples against the hand-labeled validation set where
   possible, and add a corresponding entry to `DECISIONS.md`.
-- **Proposing a taxonomy or methodology change:** e.g., changing the 90-day
+- **Proposing a taxonomy or methodology change:** e.g., changing the 30-day
   response window, adding a response category, changing the issue codebook.
   These are the most consequential kind of change since they affect how
   history is coded. Open an issue first to discuss before submitting a PR,

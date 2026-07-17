@@ -12,7 +12,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Then bring in the rest of the project.
 COPY . .
 
-# Runs the Amnesty scraper (the only pipeline stage that exists so far).
-# Replace with the full scrape -> link -> classify -> commit pipeline as
-# later slices land.
-CMD ["python", "-m", "scrapers.amnesty"]
+# Runs the combined event-ingestion pipeline (Amnesty + HRW, deduplicated --
+# the only pipeline stages that exist so far). Replace with the full
+# scrape -> link -> classify -> commit pipeline as later slices land.
+CMD ["python", "-m", "scrapers.pipeline"]

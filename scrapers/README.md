@@ -62,14 +62,38 @@ Narrowed to news type `News Release`/`Statement` via `filter_by_news_type()`
 `Letter`, considered and deferred), plus a known nuance where a US
 policy-area label was seen tagged as if it were a country.
 
+## dedup.py
+
+Merges events reported by more than one source as the same real-world
+incident: two events are merged only if they share a country, have similar
+titles (`difflib` ratio >= 0.6), and were published within 3 days of each
+other — a deterministic heuristic, not the LLM-verified matching CLAUDE.md
+specifies for event–statement linking (stage 3), since no LLM
+infrastructure exists yet. `deduplicate_events()` is pure and works on any
+mix of event objects (`AmnestyEvent`, `HRWEvent`, ...) via duck-typing.
+Kept events are `unique_events`; merged-away events aren't discarded, they're
+recorded in `groups` (a `DuplicateGroup` per cluster, with what matched) for
+audit. See the "Cross-source event deduplication" entry in `DECISIONS.md`
+for the thresholds' rationale and known limitations (greedy clustering, not
+full transitive closure).
+
+## pipeline.py
+
+The combined entrypoint: runs Amnesty and HRW ingestion, applies each
+source's filter, deduplicates the combined set, and writes one
+`data/events.json` plus one run report covering both sources together.
+Run directly with `python -m scrapers.pipeline`. Individual sources can
+still be run standalone (`python -m scrapers.amnesty` / `scrapers.hrw`) for
+debugging one source in isolation.
+
 ## report.py
 
 `build_run_report()` produces the small end-of-run report every pipeline
 stage generates (events found, date range covered, per-country counts,
-skipped/unparseable items) — see the "Run reports" hard requirement in
-`CLAUDE.md`. Source-agnostic: it duck-types on `.published_at` and
-`.countries` attributes, so future ministry adapters can reuse it directly
-rather than inventing a per-adapter report format.
+skipped/unparseable items, duplicates merged) — see the "Run reports" hard
+requirement in `CLAUDE.md`. Source-agnostic: it duck-types on
+`.published_at` and `.countries` attributes, so future ministry adapters
+can reuse it directly rather than inventing a per-adapter report format.
 
 Ministry-side adapters (US State Dept, China MFA, etc.) land here next,
 behind a shared adapter interface — see [CONTRIBUTING.md](../CONTRIBUTING.md)

@@ -94,10 +94,12 @@ class AmnestyEvent:
     resource_types: list[str] = field(default_factory=list)
     summary: str = ""
     body: str = ""
+    source: str = "amnesty"
 
     def to_dict(self) -> dict:
         return {
             "id": self.id,
+            "source": self.source,
             "title": self.title,
             "url": self.url,
             "published_at": self.published_at.isoformat() if self.published_at else None,
@@ -181,6 +183,7 @@ def parse_feed(raw_xml: str) -> ParseResult:
         except Exception as exc:
             skipped.append(
                 {
+                    "source": "amnesty",
                     "title": (item.findtext("title") or "").strip() or None,
                     "guid": (item.findtext("guid") or item.findtext("link") or "").strip() or None,
                     "reason": f"{type(exc).__name__}: {exc}",

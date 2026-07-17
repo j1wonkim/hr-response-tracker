@@ -13,8 +13,9 @@ response as **shamed**, **endorsed**, **abstention**, or **no response**.
 The result is published as a public dataset and visualized as a per-event
 response matrix.
 
-**Status:** early scaffolding. Nothing is scraping yet — see
-[Current state](#current-state) below.
+**Status:** event ingestion (Amnesty + HRW, deduplicated) is working end to
+end; ministry-side scraping, linking, classification, and visualization are
+not built yet — see [Current state](#current-state) below.
 
 ## Why this exists
 
@@ -28,8 +29,9 @@ pattern observable, systematically and over time, instead of anecdotally.
 1. **Event ingestion** — scrape discrete, datable event content daily from
    human rights organizations (Amnesty Urgent Actions/Actions, HRW News
    Releases/Statements — reports and other ongoing-practice documentation
-   are deliberately excluded), filter to state-perpetrated violations via
-   LLM classification.
+   are deliberately excluded), deduplicate events reported by more than one
+   organization, filter to state-perpetrated violations via LLM
+   classification.
 2. **Response monitoring** — scrape foreign ministry sources daily via a
    common adapter interface, one adapter per source, sources declared in
    config.
@@ -80,22 +82,27 @@ against fixtures, and how to add a new source.
 
 ## Current state
 
-Two event-ingestion sources are working. `scrapers/amnesty.py` fetches
-Amnesty's RSS feed and narrows to `Action`/`Urgent Action` items, but **that
-filter currently yields close to zero events** — most of that content lives
-at `amnesty.org/en/documents/...`, unreachable from the RSS feed, REST API,
-or sitemap (see `DECISIONS.md`). `scrapers/hrw.py` fetches Human Rights
-Watch's RSS feed for an item index, then fetches each article page for
-country/topic/news-type tags, narrowing to `News Release`/`Statement` — and
-this one actually works: a live run pulled 9 real, tagged events from 20
-raw feed items. Both are tested against fixtures in `tests/fixtures/`; 24
-tests pass via `docker run --rm hr-response-tracker pytest`. Every run ends
-with a small report (events found, date range, per-country counts, skipped
-items) via `scrapers/report.py`. Neither source yet determines the
-perpetrating actor or filters to state-perpetrated violations — that's a
-separate LLM classification call, still to come. No ministry-side scraping,
-linking, classification, automation, or visualization yet. Build order and
-architecture are documented in `CLAUDE.md`.
+Two event-ingestion sources are working, combined by one pipeline.
+`scrapers/amnesty.py` fetches Amnesty's RSS feed and narrows to
+`Action`/`Urgent Action` items, but **that filter currently yields close to
+zero events** — most of that content lives at `amnesty.org/en/documents/...`,
+unreachable from the RSS feed, REST API, or sitemap (see `DECISIONS.md`).
+`scrapers/hrw.py` fetches Human Rights Watch's RSS feed for an item index,
+then fetches each article page for country/topic/news-type tags, narrowing
+to `News Release`/`Statement` — and this one actually works: a live run
+pulled 9 real, tagged events from 20 raw feed items. `scrapers/dedup.py`
+merges events reported by both sources for the same real-world incident
+(heuristic: shared country + title similarity + a 3-day window — not yet
+LLM-verified, see `DECISIONS.md`), and `scrapers/pipeline.py` runs both
+sources, dedups, and writes one combined `data/events.json`. All of it is
+tested against fixtures in `tests/fixtures/`; 33 tests pass via
+`docker run --rm hr-response-tracker pytest`. Every run ends with a small
+report (events found, date range, per-country counts, skipped items,
+duplicates merged) via `scrapers/report.py`. Neither source yet determines
+the perpetrating actor or filters to state-perpetrated violations — that's
+a separate LLM classification call, still to come. No ministry-side
+scraping, linking, classification, automation, or visualization yet. Build
+order and architecture are documented in `CLAUDE.md`.
 
 ## Data & citation
 

@@ -27,6 +27,7 @@ class RunReport:
     country_counts: dict
     skipped_count: int
     skipped: list = field(default_factory=list)
+    duplicates_merged: int = 0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -38,6 +39,7 @@ class RunReport:
             f"Raw items seen: {self.raw_items_seen}",
             f"Events found (final): {self.events_found}",
             f"Excluded by filter: {self.excluded_by_filter}",
+            f"Duplicates merged: {self.duplicates_merged}",
         ]
         if self.date_range:
             lines.append(f"Date range: {self.date_range['earliest']} to {self.date_range['latest']}")
@@ -61,6 +63,7 @@ def build_run_report(
     events: list[Any],
     skipped: list[dict],
     raw_items_seen: int,
+    duplicates_merged: int = 0,
 ) -> RunReport:
     dated = [e.published_at for e in events if getattr(e, "published_at", None) is not None]
     date_range = None
@@ -71,7 +74,7 @@ def build_run_report(
     for event in events:
         counts.update(getattr(event, "countries", []))
 
-    excluded_by_filter = raw_items_seen - len(events) - len(skipped)
+    excluded_by_filter = raw_items_seen - len(events) - len(skipped) - duplicates_merged
 
     return RunReport(
         source=source,
@@ -83,4 +86,5 @@ def build_run_report(
         country_counts=dict(counts),
         skipped_count=len(skipped),
         skipped=skipped,
+        duplicates_merged=duplicates_merged,
     )

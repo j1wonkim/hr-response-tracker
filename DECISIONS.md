@@ -348,6 +348,58 @@ fetching the article page directly, which also gives access to the cleaner
 
 ---
 
+## 2026-07-17 — Cross-source event deduplication (heuristic, not LLM-verified)
+
+**Decision:** `scrapers/dedup.py` merges events that are almost certainly
+the same real-world incident reported by more than one source (currently
+Amnesty + HRW). Two events are merged only if ALL of: they share at least
+one country, their titles are similar (`difflib.SequenceMatcher` ratio >=
+0.6), and they were published within 3 days of each other. Within a merged
+group, the earliest-published event is kept as the canonical record; the
+rest are dropped from the event set but retained in a separate audit trail
+(`DuplicateGroup`, written to `data/duplicate_groups.json` by
+`scrapers/pipeline.py`) recording exactly what matched and why, so nothing
+is silently discarded. Runs after each source's own resource-type/news-type
+filter, not before — deduplicating content that's already excluded from
+the event set (Reports, Background Briefings, etc.) is wasted work.
+
+**Rationale:** Without this, the same incident covered by both Amnesty and
+HRW would produce two rows in the event set, each independently eligible
+for event–statement linking (stage 3) — silently double-counting one
+incident in the response matrix (a government's single reaction would
+appear to "respond" to two events instead of one, and `no_response` tallies
+would be thrown off the same way). A deterministic, conservative heuristic
+was chosen over the LLM-verified entity/embedding matching CLAUDE.md
+specifies for event–statement linking (stage 3) because no LLM
+infrastructure exists yet in this repo, and event-vs-event dedup is a
+simpler problem than event-vs-statement linking (same underlying incident,
+reported in similar language, close together in time — not an incident
+being referenced obliquely in a diplomatic statement). The 0.6 similarity
+threshold and 3-day window are initial values, not validated against real
+duplicate pairs yet (a live pipeline run on 2026-07-17 found zero
+duplicates, because Amnesty's own filter currently yields almost no events
+to cross-match against — see the Amnesty/HRW entries above); revisit once
+real cross-source duplicates are observed.
+
+**Known limitation — greedy clustering, not full transitive closure:** if
+event A matches event B, and B matches event C, but A and C don't
+pairwise-match each other, C still joins A's cluster in the current
+implementation (whichever event is encountered first "claims" every later
+event that matches it). Documented in the module docstring rather than
+silently assumed correct; a proper union-find implementation would fix this
+but wasn't justified before real multi-way duplicate clusters are observed.
+
+**Alternatives considered:** Matching on URL or GUID was rejected outright
+— different organizations' URLs share no structure. Matching on country
+alone (no title similarity) was rejected as far too permissive — two
+unrelated events about the same country would merge constantly. Deferring
+dedup entirely until stage 3's LLM/embedding infrastructure exists was
+considered, but rejected: shipping known-duplicate rows into the response
+matrix in the meantime was judged worse than a conservative, honestly-
+limited heuristic that can be tightened later.
+
+---
+
 <!--
 Template for new entries:
 

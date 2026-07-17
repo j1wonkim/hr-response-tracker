@@ -76,10 +76,12 @@ class HRWEvent:
     topics: list[str] = field(default_factory=list)
     summary: str = ""
     body: str = ""
+    source: str = "hrw"
 
     def to_dict(self) -> dict:
         return {
             "id": self.id,
+            "source": self.source,
             "title": self.title,
             "url": self.url,
             "published_at": self.published_at.isoformat() if self.published_at else None,
@@ -123,7 +125,7 @@ def parse_feed_index(raw_xml: str) -> IndexParseResult:
             published_at = parsedate_to_datetime(pub_date_raw) if pub_date_raw else None
             items.append(IndexItem(guid=guid, title=title, url=url, published_at=published_at))
         except Exception as exc:
-            skipped.append({"title": title or None, "guid": guid or None, "reason": f"{type(exc).__name__}: {exc}"})
+            skipped.append({"source": "hrw", "title": title or None, "guid": guid or None, "reason": f"{type(exc).__name__}: {exc}"})
     return IndexParseResult(items=items, skipped=skipped, raw_items_seen=len(raw_items))
 
 
@@ -221,7 +223,7 @@ def fetch_events(
             )
             events.append(parse_article_page(html, item.url, fallback=item))
         except Exception as exc:
-            skipped.append({"title": item.title or None, "guid": item.guid or None, "reason": f"{type(exc).__name__}: {exc}"})
+            skipped.append({"source": "hrw", "title": item.title or None, "guid": item.guid or None, "reason": f"{type(exc).__name__}: {exc}"})
 
     return FetchResult(events=events, skipped=skipped, raw_items_seen=index.raw_items_seen)
 
