@@ -16,9 +16,9 @@ matrix.
 
 **Status:** event ingestion, deduplication, and state-perpetrator
 classification (HRW) are working end to end and verified against the live
-Anthropic API; ministry-side scraping, linking, issue classification, and
-visualization are not built yet — see [Current state](#current-state)
-below.
+Anthropic API; ministry-side response monitoring has its first adapter
+(South Korea MFA); linking, issue classification, and visualization are
+not built yet — see [Current state](#current-state) below.
 
 ## Why this exists
 
@@ -135,13 +135,20 @@ fixed). `scrapers/pipeline.py` writes `data/events.json` plus a run report
 (events found, date range, per-country counts, skipped items, duplicates
 merged) via `scrapers/report.py`. All of it is tested against fixtures in
 `tests/fixtures/`; tests pass via `docker run --rm hr-response-tracker
-pytest`. No ministry-side scraping, linking, issue classification,
-automation, or visualization yet. Two slice-2 sources were investigated
-(US State Dept DRL, South Korea MFA) — both allow crawling, but neither
-had a clean fit yet (State Dept has no DRL-specific RSS; MOFA's RSS
-doesn't cover the specific board asked about) — no adapter code written
-pending a decision on scope. Build order and architecture are documented
-in `CLAUDE.md`.
+pytest`. `scrapers/mofa.py` is the first ministry-side (response
+monitoring) adapter, crawling South Korea MFA's Press Releases (`m_5676`)
+and Press Briefings (`m_5679`) RSS feeds — chosen over the broader
+Ministry News board (`m_5674`), which has no RSS feed at all; see
+`DECISIONS.md`. Single-phase, since each feed already carries full
+statement text in `content:encoded` — no second article-page fetch the
+way HRW needs. A live run pulled 58 real statements with zero skipped
+items. Run standalone with `python -m scrapers.mofa`; not yet wired into
+`scrapers/pipeline.py`, since linking (stage 3) — which is what would
+actually connect ministry statements to events — doesn't exist yet. No
+event–statement linking, issue classification, automation, or
+visualization yet, and the US State Dept DRL adapter is still just an
+investigated lead (no DRL-specific RSS, but a promising REST API angle).
+Build order and architecture are documented in `CLAUDE.md`.
 
 ## License
 
@@ -153,10 +160,6 @@ This repository carries two licenses, covering different things:
   licensed separately under [CC BY 4.0](LICENSE-DATA). You're free to use,
   share, and adapt it, even commercially, with attribution.
 
-The `LICENSE` and `LICENSE-DATA` files each contain the verbatim,
-unmodified license text (so GitHub and other tooling can detect them
-correctly) — this section is where the project-specific explanation,
-citation, and attribution details live instead.
 
 If you use this dataset, please cite it:
 

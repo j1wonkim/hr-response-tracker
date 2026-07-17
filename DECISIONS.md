@@ -660,6 +660,69 @@ No quality regression observed on this sample.
 
 ---
 
+## 2026-07-17 — Build the South Korea MFA adapter (scrapers/mofa.py)
+
+**Decision:** Implement `scrapers/mofa.py` as the first ministry-side
+(response monitoring, CLAUDE.md stage 2) adapter, fetching and parsing
+the two RSS feeds chosen in the prior entry. Three implementation choices
+worth recording:
+
+1. **Single-phase, not two-phase.** `scrapers/hrw.py` needs a second
+   article-page fetch because HRW's feed carries no taxonomy and no full
+   text. MOFA's feeds are different: `<content:encoded>` already contains
+   the complete statement text (a full press release, or an entire day's
+   spokesperson briefing transcript). There's nothing on the article page
+   the feed doesn't already have, so `mofa.py` has no second fetch at
+   all — `parse_feed()` is the whole parser.
+2. **A multi-topic briefing is stored as one statement, not split by
+   topic.** MOFA's Press Briefings board publishes one item per day that
+   can cover several unrelated topics (e.g., the July 14, 2026 briefing
+   covers an ASEAN travel announcement in a single transcript). Per
+   CLAUDE.md stage 2, ingestion's job is only to store date/source/full
+   text/URL; deciding which specific event(s) within a multi-topic
+   transcript a later linking pass should match against is stage 3's job,
+   not this adapter's. Splitting briefings by topic now would mean
+   guessing at topic boundaries with no linking logic yet to validate the
+   guess against.
+3. **`MinistryStatement.countries` means the responding country, not a
+   target/victim country.** `HRWEvent.countries` (stage 1) names who a
+   violation was committed against; reusing the same field name for "which
+   country's ministry issued this statement" risks confusion once a second
+   ministry adapter exists and both datasets get compared. Kept the same
+   field name anyway — `scrapers/report.py`'s `build_run_report()`
+   duck-types on `.countries` for its per-country tally, and inventing a
+   parallel field just for this would mean either forking the report
+   format or teaching it a second attribute name for the same purpose.
+   The semantic difference is called out directly in `mofa.py`'s
+   docstring and field comment so it isn't silently assumed elsewhere.
+
+**Encoding finding (recorded for future adapter authors):** both MOFA
+feeds serve `Content-Type: application/rss+xml` with no `charset`
+parameter. Initial inspection via this project's browser tooling showed
+mojibake (e.g. "Koreaâ€™s" instead of "Korea's"), which looked like it
+might require manual encoding handling in the adapter. Verified directly
+against the live feeds using this project's actual `requests`-based
+fetch path (`scrapers/http.py`) inside the built Docker image: `requests`
+leaves `response.encoding` unset when no charset is declared, but its
+`apparent_encoding` fallback correctly detects UTF-8 from the raw bytes,
+and `response.text` renders curly quotes and non-ASCII content correctly.
+The mojibake was an artifact of the inspection tool, not the data or the
+production fetch path — no special decoding logic was added to `mofa.py`
+as a result, but this is worth knowing before "fixing" an encoding
+problem that doesn't actually exist in the real scraper.
+
+**Verification:** 28/28 tests pass (24 existing + 4 new in
+`tests/test_mofa.py`, against trimmed real-feed fixtures in
+`tests/fixtures/mofa/`). A live run on 2026-07-17 via `python -m
+scrapers.mofa` pulled 58 statements (29 press releases + 29 briefings)
+with zero skipped items, date range spanning January-July 2026.
+
+**Alternatives considered:** None beyond the three implementation choices
+above, each already justified against the two-phase HRW pattern and
+CLAUDE.md's stage boundaries.
+
+---
+
 <!--
 Template for new entries:
 

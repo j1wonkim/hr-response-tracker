@@ -84,6 +84,45 @@ classification against the live API" entry in `DECISIONS.md`. Running this
 stage against the live API costs real money (small, but non-zero) — see the
 API cost note in the top-level README and CONTRIBUTING.md.
 
+## mofa.py
+
+The first ministry-side adapter (CLAUDE.md stage 2, response monitoring),
+South Korea's Ministry of Foreign Affairs. Crawls two RSS feeds — Press
+Releases (`m_5676`) and Press Briefings (`m_5679`) — chosen over the
+broader-looking "Ministry News" board (`m_5674`) specifically because that
+board has no RSS feed at all; see the "South Korea MFA: use Press Releases
++ Press Briefings via RSS, not Ministry News" entry in `DECISIONS.md` for
+the full reasoning and alternatives considered.
+
+Single-phase, unlike `hrw.py`: each feed's `<content:encoded>` already
+carries the full statement text — a press release's full body, or an
+entire day's spokesperson briefing transcript (MOFA doesn't split
+multi-topic briefings into separate feed items) — so there's no second
+article-page fetch. `parse_feed()` (pure) parses one feed's raw XML into
+`MinistryStatement`s; `fetch_statements()` fetches and parses both feeds,
+tolerating one feed failing without losing the other. A live run on
+2026-07-17 pulled 58 statements (29 press releases + 29 briefings) from
+both feeds with zero skipped items. Also confirmed live: both feeds serve
+`Content-Type: application/rss+xml` with no charset parameter, but
+`requests`' `apparent_encoding` detection still correctly decodes UTF-8
+(including curly quotes and non-ASCII content) without any special
+handling.
+
+`MinistryStatement.countries` is always `["South Korea"]` — the
+*responding* country the statement is attributed to, not a target/victim
+country the way `HRWEvent.countries` is. It's exposed under the same field
+name purely so `scrapers/report.py`'s `build_run_report()` can be reused
+as-is; the semantic difference is called out in the module's docstring so
+future adapter authors don't conflate the two.
+
+Not yet wired into `scrapers/pipeline.py` — that pipeline is specifically
+the stage-1 (event ingestion + classification) pipeline; ministry
+statements will join it once stage 3 (event–statement linking) exists.
+Run standalone with `python -m scrapers.mofa` to fetch, write
+`data/mofa_statements.json`, and print/write a run report. Tested against
+fixtures in `tests/fixtures/mofa/` (trimmed real feed snapshots, one per
+board).
+
 ## pipeline.py
 
 The entrypoint: runs HRW ingestion, applies the news-type filter,
@@ -101,6 +140,7 @@ requirement in `CLAUDE.md`. Source-agnostic: it duck-types on
 `.published_at` and `.countries` attributes, so future ministry adapters
 can reuse it directly rather than inventing a per-adapter report format.
 
-Ministry-side adapters (US State Dept, China MFA, etc.) land here next,
-behind a shared adapter interface — see [CONTRIBUTING.md](../CONTRIBUTING.md)
-for how to add one.
+More ministry-side adapters (US State Dept, China MFA, etc.) land here
+next, behind a shared adapter interface extracted once there's a second
+one to compare `mofa.py` against — see
+[CONTRIBUTING.md](../CONTRIBUTING.md) for how to add one.
