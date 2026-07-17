@@ -13,6 +13,11 @@ pipeline with docker build + docker run and nothing else" requirement
 predates the classification stage, and a working exploratory run without an
 API key is worth more than a hard failure. The run report says plainly
 whether classification ran.
+
+Ingestion is bounded by config/pipeline.yaml's ingest_start_date -- see
+scrapers/config.py and DECISIONS.md ("Bound initial HRW ingestion with a
+config-driven ingest_start_date"). This is a one-time backfill floor, not
+a retention policy: events already ingested are never dropped as they age.
 """
 
 from __future__ import annotations
@@ -21,15 +26,19 @@ import json
 from pathlib import Path
 
 from scrapers.classify import MissingCredentialsError, build_client, classify_events
+from scrapers.config import PipelineConfig, load_pipeline_config
 from scrapers.dedup import deduplicate_events
 from scrapers.hrw import fetch_events as fetch_hrw_events
-from scrapers.hrw import filter_by_news_type
+from scrapers.hrw import filter_by_news_type, filter_by_start_date
 from scrapers.report import build_run_report
 
 
-def run() -> dict:
+def run(config: PipelineConfig | None = None) -> dict:
+    config = config or load_pipeline_config()
+
     hrw_result = fetch_hrw_events(Path(".cache/hrw"))
     hrw_events = filter_by_news_type(hrw_result.events)
+    hrw_events = filter_by_start_date(hrw_events, config.ingest_start_date)
 
     dedup_result = deduplicate_events(hrw_events)
     deduped_events = dedup_result.unique_events
@@ -44,7 +53,9 @@ def run() -> dict:
         classification_skipped_reason = str(exc)
 
     report = build_run_report(
-        source="scrapers.pipeline (hrw, deduplicated"
+        source="scrapers.pipeline (hrw, ingest_start_date="
+        + config.ingest_start_date.isoformat()
+        + ", deduplicated"
         + (", classified)" if classification_results else ", NOT classified)"),
         events=events,
         skipped=hrw_result.skipped,

@@ -1,3 +1,4 @@
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -5,7 +6,9 @@ import pytest
 from scrapers.hrw import (
     NEWS_TYPE_INCLUDE,
     REGION_NAMES,
+    HRWEvent,
     filter_by_news_type,
+    filter_by_start_date,
     parse_article_page,
     parse_feed_index,
 )
@@ -85,6 +88,38 @@ def test_filter_by_news_type_keeps_only_news_release_and_statement(index):
     assert types == {"News Release", "Statement"}
     assert "Report" not in types
     assert set(NEWS_TYPE_INCLUDE) == {"News Release", "Statement"}
+
+
+def _make_event(published_at):
+    return HRWEvent(
+        id="id",
+        title="title",
+        url="https://www.hrw.org/news/x",
+        published_at=published_at,
+        news_type="News Release",
+    )
+
+
+def test_filter_by_start_date_keeps_on_or_after_and_drops_before():
+    events = [
+        _make_event(datetime(2025, 12, 31, tzinfo=timezone.utc)),  # before
+        _make_event(datetime(2026, 1, 1, tzinfo=timezone.utc)),  # on the boundary
+        _make_event(datetime(2026, 7, 16, tzinfo=timezone.utc)),  # after
+    ]
+
+    filtered = filter_by_start_date(events, date(2026, 1, 1))
+
+    assert len(filtered) == 2
+    assert all(e.published_at.date() >= date(2026, 1, 1) for e in filtered)
+
+
+def test_filter_by_start_date_drops_events_with_no_published_at():
+    events = [_make_event(None), _make_event(datetime(2026, 7, 16, tzinfo=timezone.utc))]
+
+    filtered = filter_by_start_date(events, date(2026, 1, 1))
+
+    assert len(filtered) == 1
+    assert filtered[0].published_at is not None
 
 
 def test_parse_article_page_falls_back_to_index_fields_when_markup_missing():

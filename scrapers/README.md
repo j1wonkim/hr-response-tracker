@@ -6,6 +6,16 @@ sources share a common adapter interface and are declared via config
 (YAML/JSON) wherever possible — see [CONTRIBUTING.md](../CONTRIBUTING.md)
 for how to add one.
 
+## config.py
+
+`load_pipeline_config()` reads `config/pipeline.yaml` (not hardcoded,
+per CLAUDE.md's config-over-code goal) into a `PipelineConfig` dataclass.
+Currently one setting: `ingest_start_date`, which bounds initial event
+ingestion (see `hrw.py` below and the "Bound initial HRW ingestion with a
+config-driven ingest_start_date" entry in `DECISIONS.md`). Ministry-source
+config will likely live in the same file or a sibling one once the
+adapter interface exists.
+
 ## http.py
 
 `fetch_raw()`/`fetch_raw_cached()` — the shared polite-fetch-with-cache
@@ -33,6 +43,16 @@ Narrowed to news type `News Release`/`Statement` via `filter_by_news_type()`
 `DECISIONS.md` for why those two (and not `Dispatches`/`Commentary`/
 `Letter`, considered and deferred), plus a known nuance where a US
 policy-area label was seen tagged as if it were a country.
+
+Also narrowed by `filter_by_start_date()` to `config/pipeline.yaml`'s
+`ingest_start_date` (2026-01-01) — events published before it are dropped
+at ingestion time. This bounds the initial backfill only, not retention:
+events already ingested are never dropped as they age past this date. See
+the "Bound initial HRW ingestion with a config-driven ingest_start_date"
+entry in `DECISIONS.md` for the full rationale (in short: response coding
+depends on a 30-day observation window, so ingesting an event without
+enough runway before launch would misrepresent silence as an observed
+`no_response`).
 
 Amnesty (`scrapers/amnesty.py`) was the original event source and has been
 removed from the codebase — its Action/Urgent Action content lives almost

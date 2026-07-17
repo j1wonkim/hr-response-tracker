@@ -723,6 +723,62 @@ CLAUDE.md's stage boundaries.
 
 ---
 
+## 2026-07-17 — Bound initial HRW ingestion with a config-driven ingest_start_date
+
+**Decision:** Add `ingest_start_date` to a new `config/pipeline.yaml`
+(loaded via `scrapers/config.py`, not hardcoded), set to `2026-01-01`.
+`scrapers/hrw.py` gets a new `filter_by_start_date()` function that drops
+any event published before this date; it's applied both in `hrw.py`'s own
+`__main__` block and in `scrapers/pipeline.py`'s `run()`, so a standalone
+HRW run and the full pipeline run behave identically.
+
+**Rationale:** This tracker is real-time by design — it exists to observe
+new events and new state responses as they happen, not to reconstruct a
+complete historical record. Launching with an open-ended backfill (whatever
+happens to still be in HRW's RSS feed) would mean the dataset's early
+period is an arbitrary, incomplete slice of history rather than a
+deliberate starting point — and because response coding depends on a
+30-day window after an event, any event ingested without enough runway
+before the launch date would show `no_response` not because the state
+actually stayed silent, but because the tracker wasn't watching yet. That
+would misrepresent past response patterns as if they were observed, when
+they weren't. A clean, known, config-declared start date makes the
+dataset's coverage boundary an explicit, citable fact instead of an
+accident of whatever the RSS feed happened to contain on launch day.
+
+**This bounds ingestion, not retention.** `ingest_start_date` only
+determines which events are picked up during ingestion; it is not
+re-applied to the existing dataset on every run, and events already
+ingested are never dropped, re-filtered, or expired as they age past this
+date. Moving `ingest_start_date` forward later to "clean up" old data
+would defeat its purpose and must not be done — if the date ever changes,
+it should only be to correct a mistake in the original launch-date choice,
+with the change and its reasoning logged here.
+
+**Config over code:** the date lives in `config/pipeline.yaml`, not as a
+constant in `scrapers/hrw.py`, per CLAUDE.md's fork-friendly design goal —
+a fork with different launch timing (or backfill needs) can change one
+YAML value instead of editing scraper code.
+
+**Alternatives considered:**
+- **No start date (full backfill of whatever HRW's feed exposes).**
+  Rejected for the reason above — the response-window mechanics would
+  silently mislabel early events as `no_response` when the real answer is
+  "the tracker didn't exist yet to observe a response."
+- **Hardcode the date in `scrapers/hrw.py`.** Simpler, but violates
+  CLAUDE.md's "config over code" principle and this project's existing
+  pattern (news-type inclusion is already a constant *in* `hrw.py`, but a
+  date a forker is likely to want to change on day one belongs in config,
+  not in a file they'd have to read the source of to find).
+- **Apply the filter inside `fetch_events()`, pre-fetch, using the RSS
+  index's `pubDate` before fetching the article page.** Would save a
+  request per stale item, but HRW's RSS feed only ever carries recent
+  items in practice, so the savings are negligible; kept the filter as a
+  simple post-fetch step (same pattern as `filter_by_news_type`) for
+  testability and consistency instead.
+
+---
+
 <!--
 Template for new entries:
 

@@ -31,7 +31,7 @@ import json
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 
@@ -233,11 +233,25 @@ def filter_by_news_type(events: list[HRWEvent], include: set[str] = NEWS_TYPE_IN
     return [e for e in events if e.news_type in include]
 
 
+def filter_by_start_date(events: list[HRWEvent], start_date: date) -> list[HRWEvent]:
+    """Keep only events published on or after start_date. Bounds *initial
+    ingestion* only -- this is not a retention policy, and events already
+    ingested before this filter existed (or from a prior config value) are
+    never re-checked or dropped by re-running it. Events with no known
+    published_at are excluded rather than assumed in-range, since there's
+    nothing to compare. See DECISIONS.md, "Bound initial HRW ingestion
+    with a config-driven ingest_start_date"."""
+    return [e for e in events if e.published_at is not None and e.published_at.date() >= start_date]
+
+
 if __name__ == "__main__":
+    from scrapers.config import load_pipeline_config
     from scrapers.report import build_run_report
 
+    config = load_pipeline_config()
     result = fetch_events(Path(".cache/hrw"))
     events = filter_by_news_type(result.events)
+    events = filter_by_start_date(events, config.ingest_start_date)
 
     out_path = Path("data/hrw_events.json")
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -248,7 +262,10 @@ if __name__ == "__main__":
     print(f"Wrote {len(events)} events to {out_path}")
 
     report = build_run_report(
-        source="scrapers.hrw (news_type in News Release, Statement)",
+        source=(
+            "scrapers.hrw (news_type in News Release, Statement; "
+            f"ingest_start_date={config.ingest_start_date.isoformat()})"
+        ),
         events=events,
         skipped=result.skipped,
         raw_items_seen=result.raw_items_seen,
